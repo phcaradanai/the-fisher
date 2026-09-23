@@ -167,7 +167,7 @@ describe('turn fishing engine', () => {
     const readyToLand: TurnFishingSession = {
       ...initial,
       stamina: 0,
-      distance: 10,
+      distance: 5,
       ap: 2,
     };
 
