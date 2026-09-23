@@ -25,6 +25,7 @@ export const FISH = [
       silhouette: 'fish-silhouette-river-minnow',
     },
     weightFactor: 0.08,
+    combat: { archetype: 'calm', resistance: 14 },
   },
   {
     id: 'reed-perch',
@@ -225,6 +226,7 @@ export const FISH = [
       silhouette: 'fish-silhouette-river-pike',
     },
     weightFactor: 2.92,
+    combat: { archetype: 'sprinter', resistance: 46 },
   },
   {
     id: 'lantern-catfish',
@@ -300,5 +302,6 @@ export const FISH = [
       silhouette: 'fish-silhouette-old-river-king',
     },
     weightFactor: 14.8,
+    combat: { archetype: 'berserker', resistance: 96 },
   },
 ] satisfies FishDefinition[];
