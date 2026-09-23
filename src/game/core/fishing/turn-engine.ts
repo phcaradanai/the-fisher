@@ -353,7 +353,6 @@ function beginNextTurn(session: TurnFishingSession, fish: TurnFishProfile): Turn
     braced: false,
     releasedThisTurn: false,
     insight: false,
-    lastCheck: null,
     lastEvent: 'fish-intent',
   };
 }
