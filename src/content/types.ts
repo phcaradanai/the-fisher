@@ -1,4 +1,5 @@
 import type { FishProfile, GearEffects } from '../game/core/fishing/types';
+import type { FishArchetype } from '../game/core/fishing/turn-types';
 
 export interface LocalizedText {
   th: string;
@@ -29,6 +30,10 @@ export interface FishDefinition extends FishProfile {
     silhouette: string;
   };
   weightFactor: number;
+  combat?: {
+    archetype: FishArchetype;
+    resistance?: number;
+  };
 }
 
 export interface FishingSpotDefinition {
