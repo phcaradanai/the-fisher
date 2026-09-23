@@ -1,0 +1,145 @@
+{
+  "title": "Choose the visual world",
+  "question": "The roll assigned Floatline Signals. Keep it, choose the field-guide alternative, take a challenger, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Floatline Signals",
+      "kicker": "THE ROLL",
+      "lineage": "Cork floats, painted bite marks, and the line signals used by canal anglers",
+      "thesis": "The float is not decoration; its changing depth tells the story of every fight.",
+      "palette": ["#0E454B", "#E8D7AA", "#F15A3B", "#5BC4A5"],
+      "materials": ["varnished cork", "monofilament", "sunlit canal water"],
+      "viewport": "The Village Canal fills the first screen, with Shallow Bank ready to fish, a visible float and line, a brief local-legend note, readable fight state, and a tactile CAST dock.",
+      "risk": "A state instrument can crowd out the adventure; keep the living canal and fish larger than its readouts.",
+      "raised": [
+        {"from": "challenger-darkroom", "raise": "A rare catch reveals in stages: wake, fish, then collection record."}
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "spot and chapter", "x": 0, "y": 0, "w": 8, "h": 1},
+          {"label": "chapter progress", "x": 8, "y": 0, "w": 4, "h": 1},
+          {"label": "live canal scene", "x": 0, "y": 1, "w": 12, "h": 6},
+          {"label": "local legend", "x": 0, "y": 1, "w": 3, "h": 2, "accent": true},
+          {"label": "float and line", "x": 4, "y": 3, "w": 4, "h": 2, "accent": true},
+          {"label": "fish state", "x": 9, "y": 1, "w": 3, "h": 2},
+          {"label": "tension and stamina", "x": 2, "y": 6, "w": 8, "h": 1, "accent": true},
+          {"label": "action dock", "x": 0, "y": 7, "w": 12, "h": 3}
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "Freshwater Field Ledger",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Regional fish survey plates and angler catch ledgers",
+      "thesis": "Every catch becomes a useful, locally illustrated entry in the player's growing fish record.",
+      "palette": ["#123B34", "#E7D6A4", "#F26441", "#9DCB71"],
+      "materials": ["printed specimen plates", "measurement ticks", "stamped catch marks"],
+      "viewport": "Keep the canal scene dominant; a compact field label identifies the spot, the first-cast action is immediate, and the ledger edge previews discovery progress without hiding the water.",
+      "risk": "Collection can become an encyclopedia instead of a game; live fishing must remain the first thing seen and done.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "field-guide masthead", "x": 0, "y": 0, "w": 12, "h": 1},
+          {"label": "canal scene", "x": 0, "y": 1, "w": 8, "h": 6},
+          {"label": "catch ledger", "x": 8, "y": 1, "w": 4, "h": 6, "accent": true},
+          {"label": "cast and gameplay actions", "x": 0, "y": 7, "w": 12, "h": 3}
+        ]
+      }
+    },
+    {
+      "id": "challenger-bioluminescent",
+      "label": "The Living Wake",
+      "verdict": "competitive",
+      "lineage": "Nocturnal plankton wakes and currents traced in living light",
+      "thesis": "Water remembers the path of a fish just long enough for the player to read its next move.",
+      "palette": ["#061522", "#008FEA", "#66F3DD", "#16344A"],
+      "materials": ["dark water", "brief luminous wakes", "fine current traces"],
+      "viewport": "A nighttime deep-water fight uses a bright wake to show fish direction while the player balances line tension and control.",
+      "case": "Strongly dramatizes water, motion, and the King Fish; weaker as the common visual world for four varied canal spots and daylight play.",
+      "risk": "A dark neon world can overwhelm Thai village life and the non-boss fish collection.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "night spot and fight phase", "x": 0, "y": 0, "w": 12, "h": 1},
+          {"label": "deep-water scene", "x": 0, "y": 1, "w": 12, "h": 6, "accent": true},
+          {"label": "fish wake and direction", "x": 2, "y": 2, "w": 8, "h": 3, "accent": true},
+          {"label": "tension and stamina", "x": 1, "y": 6, "w": 10, "h": 1},
+          {"label": "player actions", "x": 0, "y": 7, "w": 12, "h": 3}
+        ]
+      }
+    },
+    {
+      "id": "challenger-rumor-zine",
+      "label": "Canal Rumor Sheets",
+      "verdict": "competitive",
+      "lineage": "Photocopied village fishing-club notices and annotated rumor slips",
+      "thesis": "The neighborhood's changing King Fish story is collected as marks, notes, and clues from the canal bank.",
+      "palette": ["#121C20", "#F1E8D2", "#EE5544", "#A7C957"],
+      "materials": ["copied handbills", "biro annotations", "rough halftone fish marks"],
+      "viewport": "A broad playable canal view leads; clipped rumor notes, unlock stamps, and chapter clues live at its edge rather than replacing the fishing scene.",
+      "case": "Fits the villagers' rumors and chapter progression, but the paste-up structure communicates narrative better than moment-to-moment fishing.",
+      "risk": "Rough paper can read as urban punk rather than a peaceful rural game if carried too literally.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "chapter handbill", "x": 0, "y": 0, "w": 9, "h": 2, "accent": true},
+          {"label": "rumor index", "x": 9, "y": 0, "w": 3, "h": 2},
+          {"label": "canal scene", "x": 0, "y": 2, "w": 12, "h": 5},
+          {"label": "marked local clue", "x": 0, "y": 2, "w": 3, "h": 2, "accent": true},
+          {"label": "cast and fight controls", "x": 0, "y": 7, "w": 12, "h": 3}
+        ]
+      }
+    },
+    {
+      "id": "challenger-darkroom",
+      "label": "The Catch Reveal Tray",
+      "verdict": "declined",
+      "lineage": "Darkroom test strips, timed development trays, and staged image reveals",
+      "thesis": "A rare fish emerges in a deliberate reveal before it becomes a permanent collection record.",
+      "palette": ["#281414", "#F4A640", "#E4E4D8", "#101112"],
+      "materials": ["developing trays", "silver-gray reveal", "small timed marks"],
+      "viewport": "A caught fish reveals in three steps—wake, silhouette, full species and size—then resolves to its saved entry and reward.",
+      "case": "The reveal ceremony fits rarity, but the darkroom has little connection to fishing, the canal, or the player's everyday journey.",
+      "kept": "Use a short staged reveal for rare catches; keep the sequence legible and let the player proceed or skip it.",
+      "risk": "A literal darkroom palette would make a peaceful outdoor fishing game feel enclosed and somber.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "catch result", "x": 0, "y": 0, "w": 12, "h": 1},
+          {"label": "species reveal", "x": 1, "y": 1, "w": 10, "h": 6, "accent": true},
+          {"label": "weight and reward", "x": 1, "y": 7, "w": 6, "h": 2},
+          {"label": "collection action", "x": 7, "y": 7, "w": 4, "h": 2}
+        ]
+      }
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "A familiar polished fishing-game screen: scenic water, readable meters, spot selector, and clear action buttons.",
+    "palette": ["#102E35", "#F3F1E7", "#76A85A", "#E99649"],
+    "materials": ["illustrated water scene", "flat HUD panels", "labeled meters"],
+    "viewport": "A large canal scene sits above a conventional row of location, progress, and fishing controls.",
+    "risk": "Easy to understand but easier to confuse with a standard game HUD; the signature fishing mechanic stays less distinctive.",
+    "wireframe": {
+      "cols": 12,
+      "rows": 10,
+      "regions": [
+        {"label": "game navigation", "x": 0, "y": 0, "w": 12, "h": 1},
+        {"label": "canal scene", "x": 0, "y": 1, "w": 12, "h": 6},
+        {"label": "meters and chapter status", "x": 0, "y": 7, "w": 12, "h": 1},
+        {"label": "fishing controls", "x": 0, "y": 8, "w": 12, "h": 2}
+      ]
+    }
+  },
+  "steer": true
+}
