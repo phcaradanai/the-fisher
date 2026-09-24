@@ -48,8 +48,8 @@ export const FISHING_SPOTS = [
     id: 'deep-pool',
     name: { th: 'แอ่งน้ำลึก', en: 'Deep Pool' },
     description: {
-      th: 'แอ่งมืดใต้โค้งคลองมีเพียงราชาปลาเฒ่าที่อาศัยอยู่ ต้องปลดล็อกการล่าก่อนจึงจะเข้าได้',
-      en: 'A shadowed hollow beneath the canal bend, home only to the Old River King. Unlock the hunt before entering.',
+      th: 'แอ่งมืดใต้โค้งคลองเป็นถิ่นของพญาช่อนเงาจันทร์ ต้องปลดล็อกการล่าก่อนจึงจะเข้าได้',
+      en: 'A shadowed hollow beneath the canal bend, home to the Moon Shadow Snakehead. Unlock the hunt before entering.',
     },
     fishIds: ['old-river-king'],
     unlockAfter: 'old-fisher-rumor',

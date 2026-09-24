@@ -20,4 +20,21 @@ describe('Chapter 1 content validation', () => {
 
     expect(validateContentCatalogs(catalogs)).toContain('Duplicate fish id "river-minnow".');
   });
+  it('reports fish artwork outside the asset directory', () => {
+    const catalogs = structuredClone(CONTENT_CATALOGS);
+    catalogs.fish[0]!.artwork = '/images/not-fish-art/missing.png';
+
+    expect(validateContentCatalogs(catalogs)).toContain(
+      'Fish river-minnow.artwork must reference a PNG under "/images/fish_art_a/".',
+    );
+  });
+
+  it('reports duplicate fish artwork assignments', () => {
+    const catalogs = structuredClone(CONTENT_CATALOGS);
+    catalogs.fish[1]!.artwork = catalogs.fish[0]!.artwork;
+
+    expect(validateContentCatalogs(catalogs)).toContain(
+      `Fish reed-perch.artwork duplicates artwork "${catalogs.fish[0]!.artwork}".`,
+    );
+  });
 });

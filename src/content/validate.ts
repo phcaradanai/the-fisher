@@ -26,6 +26,7 @@ export const EXPECTED_CATALOG_COUNTS = {
   gearCategories: { rod: 4, reel: 3, line: 3, hook: 3, bait: 5 },
 } as const;
 
+const supportedArchetypes = ['calm', 'sprinter', 'diver', 'bruiser', 'trickster', 'endurance', 'berserker'];
 const supportedBehaviors = ['steady', 'darting', 'ambush', 'king'];
 const supportedRarities = ['common', 'uncommon', 'rare', 'king'];
 const supportedGearRarities = ['common', 'uncommon', 'rare'];
@@ -202,8 +203,17 @@ export function validateContentCatalogs(catalogs: ContentCatalogs = CONTENT_CATA
 
   const rarityCounts: Record<string, number> = { common: 0, uncommon: 0, rare: 0, king: 0 };
   const kingFishIds: string[] = [];
+  const fishArtworkPaths = new Set<string>();
   for (const fishRecord of fish) {
     const fishId = isNonEmptyString(fishRecord.id) ? fishRecord.id : '(missing id)';
+    const artwork = fishRecord.artwork;
+    if (!isNonEmptyString(artwork) || !/^\/images\/fish_art_a\/[^/]+\.png$/.test(artwork)) {
+      errors.push(`Fish ${fishId}.artwork must reference a PNG under "/images/fish_art_a/".`);
+    } else if (fishArtworkPaths.has(artwork)) {
+      errors.push(`Fish ${fishId}.artwork duplicates artwork "${artwork}".`);
+    } else {
+      fishArtworkPaths.add(artwork);
+    }
     validateLocalizedText(`Fish ${fishId}.name`, fishRecord.name, errors);
     validateLocalizedText(`Fish ${fishId}.description`, fishRecord.description, errors);
     if (!isNonEmptyString(fishRecord.areaId) || !areasById.has(fishRecord.areaId)) {
@@ -280,6 +290,29 @@ export function validateContentCatalogs(catalogs: ContentCatalogs = CONTENT_CATA
         errors.push(`Fish ${fishId}.preferredBaitIds item "${baitId}" is not bait gear.`);
       } else if (!Array.isArray(bait.baitTargets) || !bait.baitTargets.includes(fishId)) {
         errors.push(`Fish ${fishId} prefers bait "${baitId}", but that bait does not target this fish.`);
+      }
+    }
+    if (fishRecord.combat !== undefined) {
+      const combat = isDataRecord(fishRecord.combat) ? fishRecord.combat : undefined;
+      if (!combat) {
+        errors.push(`Fish ${fishId}.combat must be an object.`);
+      } else {
+        if (!supportedArchetypes.includes(String(combat.archetype))) {
+          errors.push(`Fish ${fishId}.combat.archetype is not supported.`);
+        }
+        if (combat.resistance !== undefined
+          && (!isFiniteNumber(combat.resistance) || combat.resistance <= 0 || combat.resistance > 100)) {
+          errors.push(`Fish ${fishId}.combat.resistance must be a finite value from 1 to 100.`);
+        }
+        if (combat.bossPhases !== undefined) {
+          const phases = isDataRecord(combat.bossPhases) ? combat.bossPhases : undefined;
+          const frenzyAt = phases?.frenzyAt;
+          const desperateAt = phases?.desperateAt;
+          if (!isFiniteNumber(frenzyAt) || !isFiniteNumber(desperateAt)
+            || frenzyAt <= 0 || frenzyAt >= 1 || desperateAt <= 0 || desperateAt >= frenzyAt) {
+            errors.push(`Fish ${fishId}.combat.bossPhases must set 0 < desperateAt < frenzyAt < 1.`);
+          }
+        }
       }
     }
   }

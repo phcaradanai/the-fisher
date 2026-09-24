@@ -1,13 +1,14 @@
-import type { FishingEvent } from '../game/core/fishing/types';
+import type { TurnCombatEvent } from '../game/core/fishing/turn-types';
 
-const CUES: Record<FishingEvent, { durationMs: number; frequency: number; type: OscillatorType }> = {
-  cast: { durationMs: 180, frequency: 310, type: 'triangle' },
-  splash: { durationMs: 140, frequency: 220, type: 'sine' },
-  bite: { durationMs: 240, frequency: 740, type: 'sine' },
-  hooked: { durationMs: 180, frequency: 490, type: 'triangle' },
-  'fish-dash': { durationMs: 120, frequency: 170, type: 'sine' },
-  'tension-warning': { durationMs: 200, frequency: 125, type: 'square' },
-  'skill-used': { durationMs: 260, frequency: 580, type: 'triangle' },
+const CUES: Record<TurnCombatEvent, { durationMs: number; frequency: number; type: OscillatorType }> = {
+  'action-reel': { durationMs: 150, frequency: 340, type: 'triangle' },
+  'action-pull': { durationMs: 180, frequency: 175, type: 'sine' },
+  'action-release': { durationMs: 180, frequency: 235, type: 'sine' },
+  'action-brace': { durationMs: 130, frequency: 125, type: 'square' },
+  'action-observe': { durationMs: 220, frequency: 585, type: 'triangle' },
+  'fish-action': { durationMs: 140, frequency: 190, type: 'sine' },
+  'fish-intent': { durationMs: 110, frequency: 420, type: 'triangle' },
+  'line-damaged': { durationMs: 210, frequency: 115, type: 'square' },
   caught: { durationMs: 380, frequency: 660, type: 'sine' },
   escaped: { durationMs: 260, frequency: 260, type: 'sine' },
   'line-break': { durationMs: 240, frequency: 105, type: 'square' },
@@ -21,7 +22,7 @@ export function unlockFishingAudio(): void {
   if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
 }
 
-export function playFishingCue(event: FishingEvent, enabled: boolean): void {
+export function playFishingCue(event: TurnCombatEvent, enabled: boolean): void {
   if (!enabled || !audioContext || audioContext.state !== 'running') return;
 
   const cue = CUES[event];

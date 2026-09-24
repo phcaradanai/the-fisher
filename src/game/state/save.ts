@@ -6,6 +6,7 @@ const FishRecordSchema = z.object({
   caught: z.number().int().nonnegative(),
   bestWeightKg: z.number().nonnegative(),
   largestLengthCm: z.number().nonnegative(),
+  knowledgeLevel: z.number().int().min(0).max(3).default(0),
 }).strict();
 
 export type FishRecord = z.infer<typeof FishRecordSchema>;
