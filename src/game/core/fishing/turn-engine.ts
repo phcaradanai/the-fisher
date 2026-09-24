@@ -48,14 +48,21 @@ function outcomeScale(outcome: CheckOutcome): number {
   }
 }
 
-function bossPhaseFor(fish: TurnFishProfile, stamina: number): 1 | 2 | 3 | null {
+function bossPhaseFor(
+  fish: TurnFishProfile,
+  stamina: number,
+  currentPhase: 1 | 2 | 3 | null = null,
+): 1 | 2 | 3 | null {
   const phases = fish.bossPhases;
-  if (!phases) return null;
+  if (!phases) return currentPhase;
 
   const staminaRatio = stamina / Math.max(1, fish.stats.stamina);
-  if (staminaRatio <= phases.desperateAt) return 3;
-  if (staminaRatio <= phases.frenzyAt) return 2;
-  return 1;
+  const targetPhase = staminaRatio <= phases.desperateAt
+    ? 3
+    : staminaRatio <= phases.frenzyAt ? 2 : 1;
+  if (currentPhase === null) return targetPhase;
+  if (targetPhase <= currentPhase) return currentPhase;
+  return Math.min(currentPhase + 1, targetPhase) as 1 | 2 | 3;
 }
 
 function intentDifficulty(
@@ -145,17 +152,17 @@ function intentWeights(
       break;
     case 'berserker':
       if (phase === 3) {
-        weights['power-dash'] = 44;
-        weights.thrash = 31;
+        weights['power-dash'] = 38;
+        weights.thrash = 27;
         weights['deep-dive'] = 16;
         weights['steady-pull'] = 7;
-        weights.recover = 2;
+        weights.recover = 12;
       } else if (phase === 2) {
-        weights['power-dash'] = 32;
-        weights.thrash = 30;
+        weights['power-dash'] = 30;
+        weights.thrash = 28;
         weights['deep-dive'] = 24;
-        weights['steady-pull'] = 10;
-        weights.recover = 4;
+        weights['steady-pull'] = 8;
+        weights.recover = 10;
       } else {
         weights['steady-pull'] = 28;
         weights['deep-dive'] = 24;
@@ -202,11 +209,16 @@ function nextIntent(
   seed: number,
   fish: TurnFishProfile,
   stamina: number,
+  currentPhase: 1 | 2 | 3 | null,
 ): { seed: number; phase: 1 | 2 | 3 | null; intent: FishIntent } {
-  const phase = bossPhaseFor(fish, stamina);
+  const phase = bossPhaseFor(fish, stamina, currentPhase);
   const staminaRatio = clamp(stamina / Math.max(1, fish.stats.stamina), 0, 1);
   const weighted = weightedIntent(seed, fish, staminaRatio, phase);
   return { ...weighted, phase };
+}
+
+function isBraceCounterIntent(intent: FishIntentType): boolean {
+  return intent === 'power-dash' || intent === 'thrash';
 }
 
 function intentMode(action: TurnFishingAction, session: TurnFishingSession): {
@@ -218,14 +230,16 @@ function intentMode(action: TurnFishingAction, session: TurnFishingSession): {
   const intent = session.currentIntent.type;
   const aggressive = intent === 'power-dash' || intent === 'deep-dive' || intent === 'thrash';
 
-  if (action === 'brace' && aggressive) return { mode: 'advantage', reason: 'brace-counter' };
-  if ((action === 'pull' || action === 'reel') && session.braced && aggressive) {
+  if (action === 'brace' && !session.braced && aggressive) {
+    return { mode: 'advantage', reason: 'brace-counter' };
+  }
+  if ((action === 'pull' || action === 'reel') && session.braced && isBraceCounterIntent(intent)) {
     return { mode: 'advantage', reason: 'brace-counter' };
   }
   if ((action === 'pull' || action === 'reel') && intent === 'recover') {
     return { mode: 'advantage', reason: 'recovery-window' };
   }
-  if ((action === 'reel' && (intent === 'power-dash' || intent === 'deep-dive'))
+  if ((action === 'reel' && intent === 'power-dash' && session.stamina > 0)
     || (action === 'pull' && aggressive)) {
     return { mode: 'disadvantage', reason: 'poor-response' };
   }
@@ -348,17 +362,21 @@ function applyCheckAction(
         tension += Math.max(1, 6 - stats.control * 0.35) * (1.15 - scale * 0.15);
       }
       break;
-    case 'pull':
+    case 'pull': {
       if (scale === 0) {
         distance += 3;
         tension += 13;
       } else {
-        stamina -= (9 + Math.max(0, stats.power) * 0.75) * scale;
+        const phaseDamageMultiplier = fish.archetype === 'berserker'
+          ? session.bossPhase === 3 ? 1.7 : session.bossPhase === 2 ? 1.4 : 1
+          : 1;
+        stamina -= (9 + Math.max(0, stats.power) * 0.75) * scale * phaseDamageMultiplier;
         distance -= (7.5 + Math.max(0, stats.power) * 0.35) * scale;
         tension += Math.max(3, 9 - stats.control * 0.35 - stats.lineStrength * 0.2)
           * (1.15 - scale * 0.18);
       }
       break;
+    }
     case 'brace':
       braced = scale > 0;
       if (check.result.outcome === 'critical-success') tension -= 8;
@@ -417,7 +435,9 @@ function resolveFishAction(
       break;
     case 'recover':
       tensionPressure = -12;
-      staminaRecovery = 5 + fish.stats.resistance * 0.04;
+      staminaRecovery = fish.archetype === 'berserker'
+        ? 3
+        : 5 + fish.stats.resistance * 0.04;
       break;
   }
 
@@ -465,7 +485,7 @@ function resolveFishAction(
   if (distance >= MAX_DISTANCE) return finishFailure(next, 'escaped');
   if (stamina <= 0 && distance <= (fish.catchDistance ?? CATCH_DISTANCE)) return finishCaught(next, fish);
 
-  const intentRoll = nextIntent(next.seed, fish, next.stamina);
+  const intentRoll = nextIntent(next.seed, fish, next.stamina, session.bossPhase);
   next = {
     ...next,
     seed: intentRoll.seed,

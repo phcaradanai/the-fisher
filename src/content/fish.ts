@@ -214,7 +214,7 @@ export const FISH = [
     id: 'river-pike',
     artwork: '/images/fish_art_a/Armored Iron Gar in Ruined Waterways.png',
     behavior: 'ambush',
-    stats: { power: 52, stamina: 45, speed: 42, technique: 47 },
+    stats: { power: 62, stamina: 56, speed: 28, technique: 47 },
     sizeRangeCm: { min: 32, max: 71 },
     name: { th: 'ปลาการ์เกราะเหล็ก', en: 'Armored Iron Gar' },
     description: {
@@ -235,7 +235,7 @@ export const FISH = [
       silhouette: 'fish-silhouette-river-pike',
     },
     weightFactor: 2.92,
-    combat: { archetype: 'sprinter', resistance: 50 },
+    combat: { archetype: 'bruiser', resistance: 64 },
   },
   {
     id: 'lantern-catfish',

@@ -44,13 +44,13 @@ const diverFish: TurnFishProfile = {
 };
 const pikeFish: TurnFishProfile = {
   id: 'river-pike',
-  archetype: 'sprinter',
+  archetype: 'bruiser',
   stats: {
-    power: 48,
-    stamina: 39,
-    speed: 44,
+    power: 62,
+    stamina: 56,
+    speed: 28,
     technique: 47,
-    resistance: 46,
+    resistance: 64,
   },
   sizeRangeCm: { min: 32, max: 71 },
   catchDistance: 15,
@@ -161,6 +161,9 @@ describe('turn fishing engine', () => {
     const bracedReel = previewTurnFishingAction({ ...dash, braced: true }, 'reel', diverFish, balancedGear);
     expect(bracedPull).toMatchObject({ mode: 'advantage', modeReason: 'brace-counter' });
     expect(bracedReel).toMatchObject({ mode: 'advantage', modeReason: 'brace-counter' });
+    const exhaustedDash = { ...dash, stamina: 0 };
+    expect(previewTurnFishingAction(exhaustedDash, 'reel', diverFish, balancedGear))
+      .toMatchObject({ mode: 'normal', modeReason: 'neutral' });
   });
 
   it('penalizes PULL against a dive but rewards attacking a recovering fish', () => {
@@ -314,11 +317,41 @@ describe('turn fishing engine', () => {
     const desperate = applyTurnFishingAction({
       ...opening,
       ap: 1,
+      bossPhase: 2,
       stamina: 10,
       distance: 40,
       tension: 20,
     }, 'release', bossFish, balancedGear).session;
     expect(desperate.bossPhase).toBe(3);
+  });
+
+  it('advances boss phases in order and does not regress after recovery', () => {
+    const opening = withIntent(createTurnFishingSession(72, bossFish, balancedGear), 'recover', 12);
+    const frenzy = applyTurnFishingAction({
+      ...opening,
+      ap: 1,
+      bossPhase: 1,
+      stamina: 10,
+      distance: 40,
+      tension: 20,
+    }, 'release', bossFish, balancedGear).session;
+    expect(frenzy.bossPhase).toBe(2);
+
+    const desperate = applyTurnFishingAction({
+      ...frenzy,
+      ap: 1,
+      stamina: 10,
+    }, 'release', bossFish, balancedGear).session;
+    expect(desperate.bossPhase).toBe(3);
+
+    const recovered = applyTurnFishingAction({
+      ...desperate,
+      ap: 1,
+      currentIntent: { type: 'recover', difficulty: 12 },
+      stamina: 24,
+    }, 'release', bossFish, balancedGear).session;
+    expect(recovered.stamina).toBe(27);
+    expect(recovered.bossPhase).toBe(3);
   });
 
   it('makes the boss desperate phase press harder on distance', () => {

@@ -18,7 +18,9 @@ describe('turn combat content adapter', () => {
     const pikeProfile = toTurnFishProfile(intermediate);
     const kingProfile = toTurnFishProfile(king);
     expect(minnowProfile.archetype).toBe('calm');
-    expect(pikeProfile.archetype).toBe('sprinter');
+    expect(pikeProfile.archetype).toBe('bruiser');
+    expect(pikeProfile.stats.power).toBeGreaterThan(pikeProfile.stats.speed);
+    expect(pikeProfile.stats.resistance).toBeGreaterThan(pikeProfile.stats.speed);
     expect(kingProfile.archetype).toBe('berserker');
     expect(kingProfile.stats.resistance).toBeGreaterThan(minnowProfile.stats.resistance);
     expect(kingProfile.bossPhases).toEqual({ frenzyAt: 0.6, desperateAt: 0.25 });
