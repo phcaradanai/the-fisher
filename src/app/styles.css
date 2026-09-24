@@ -413,7 +413,7 @@ button:disabled {
   position: relative;
   isolation: isolate;
   width: 100%;
-  aspect-ratio: 1.68;
+  aspect-ratio: 4 / 3;
   min-height: 370px;
   overflow: hidden;
   border-radius: 12px;
@@ -1073,6 +1073,35 @@ meter::-webkit-meter-even-less-good-value {
   border-top: 1px solid #c4c1a5;
 }
 
+.fish-entry:not(.fish-entry--unknown) {
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+}
+
+.fish-entry__artwork,
+.catch-reveal__artwork {
+  display: block;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgb(14 61 61 / 18%);
+}
+
+.fish-entry__artwork {
+  width: 100%;
+}
+
+.catch-reveal__artwork {
+  flex: 0 0 auto;
+  width: clamp(136px, 18vw, 220px);
+}
+
+.fish-artwork-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d9d0b8;
+}
+
 .fish-entry--unknown .fish-mark {
   opacity: 0.35;
   filter: saturate(0.2);
@@ -1687,7 +1716,7 @@ meter::-webkit-meter-even-less-good-value {
   }
 
   .scene-frame {
-    aspect-ratio: 1.48;
+    aspect-ratio: 4 / 3;
     min-height: 250px;
     border-radius: 10px;
   }
@@ -1695,7 +1724,7 @@ meter::-webkit-meter-even-less-good-value {
   .scene-callout {
     top: 0.55rem;
     left: 0.55rem;
-    width: min(100% - 1.1rem, 31rem);
+    width: 56%;
     padding: 0.55rem 0.65rem;
   }
 
@@ -1830,6 +1859,10 @@ meter::-webkit-meter-even-less-good-value {
     padding: 0.8rem 0;
   }
 
+  .fish-entry:not(.fish-entry--unknown) {
+    grid-template-columns: minmax(82px, 34%) minmax(0, 1fr);
+  }
+
   .fish-mark {
     transform: scale(0.78);
     transform-origin: left center;
@@ -1905,12 +1938,11 @@ meter::-webkit-meter-even-less-good-value {
   }
 
   .scene-frame {
-    aspect-ratio: 1.42;
+    aspect-ratio: 4 / 3;
     min-height: 236px;
   }
-
   .scene-callout {
-    width: calc(100% - 1rem);
+    width: 56%;
     padding: 0.5rem 0.55rem;
   }
 

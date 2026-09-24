@@ -52,7 +52,9 @@ type UiCopy = {
   automatic: string;
   modeReason: Record<CheckModeReason, string>;
   checkOutcome: Record<CheckOutcome, string>;
-  lastCheck: string;
+  lastAction: string;
+  noRoll: string;
+  fishResponse: string;
   checkRolls: string;
   checkTotal: string;
   difficulty: string;
@@ -190,7 +192,9 @@ export const UI_COPY: Record<Locale, UiCopy> = {
       success: 'Success',
       'critical-success': 'Critical success',
     },
-    lastCheck: 'Last skill check',
+    lastAction: 'Last action',
+    noRoll: 'No roll',
+    fishResponse: 'Fish response',
     checkRolls: 'Rolls',
     checkTotal: 'Total',
     difficulty: 'Target',
@@ -356,7 +360,9 @@ export const UI_COPY: Record<Locale, UiCopy> = {
       success: 'สำเร็จ',
       'critical-success': 'สำเร็จยอดเยี่ยม',
     },
-    lastCheck: 'ผลทดสอบล่าสุด',
+    lastAction: 'แอ็กชันล่าสุด',
+    noRoll: 'ไม่มีการทอย',
+    fishResponse: 'การตอบสนองของปลา',
     checkRolls: 'แต้มทอย',
     checkTotal: 'รวม',
     difficulty: 'เป้าหมาย',

@@ -553,6 +553,7 @@ export function applyTurnFishingAction(
       releasedThisTurn: true,
       lastAction: action,
       lastIntent: session.currentIntent.type,
+      lastCheck: null,
       insight: false,
     }, 'action-release');
   } else {

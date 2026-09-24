@@ -203,8 +203,17 @@ export function validateContentCatalogs(catalogs: ContentCatalogs = CONTENT_CATA
 
   const rarityCounts: Record<string, number> = { common: 0, uncommon: 0, rare: 0, king: 0 };
   const kingFishIds: string[] = [];
+  const fishArtworkPaths = new Set<string>();
   for (const fishRecord of fish) {
     const fishId = isNonEmptyString(fishRecord.id) ? fishRecord.id : '(missing id)';
+    const artwork = fishRecord.artwork;
+    if (!isNonEmptyString(artwork) || !/^\/images\/fish_art_a\/[^/]+\.png$/.test(artwork)) {
+      errors.push(`Fish ${fishId}.artwork must reference a PNG under "/images/fish_art_a/".`);
+    } else if (fishArtworkPaths.has(artwork)) {
+      errors.push(`Fish ${fishId}.artwork duplicates artwork "${artwork}".`);
+    } else {
+      fishArtworkPaths.add(artwork);
+    }
     validateLocalizedText(`Fish ${fishId}.name`, fishRecord.name, errors);
     validateLocalizedText(`Fish ${fishId}.description`, fishRecord.description, errors);
     if (!isNonEmptyString(fishRecord.areaId) || !areasById.has(fishRecord.areaId)) {

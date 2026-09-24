@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FISH, FISHING_SPOTS, GEAR, STORY_EVENTS } from '../content';
-import type { GearCategory } from '../content/types';
+import type { FishDefinition, GearCategory } from '../content/types';
 import type { GearEffects } from '../game/core/fishing/types';
 import { previewTurnFishingAction } from '../game/core/fishing/turn-engine';
 import { toTurnFishProfile, toTurnGearStats } from '../game/core/fishing/turn-adapter';
@@ -28,6 +28,42 @@ function numberText(value: number, locale: Locale, fractionDigits = 0): string {
 function markSoundGesture(action: () => void): void {
   unlockFishingAudio();
   action();
+}
+function FishArtworkImage({
+  fish,
+  locale,
+  className,
+  loading = 'lazy',
+}: {
+  fish: FishDefinition;
+  locale: Locale;
+  className: string;
+  loading?: 'eager' | 'lazy';
+}) {
+  const [failed, setFailed] = useState(false);
+  const name = localize(fish.name, locale);
+
+  if (failed) {
+    return (
+      <div className={`${className} fish-artwork-fallback`} role="img" aria-label={name} data-rarity={fish.rarity}>
+        <span className="fish-mark" aria-hidden="true">
+          <span className="fish-mark__tail" />
+          <span className="fish-mark__body" />
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      className={className}
+      src={fish.artwork}
+      alt={name}
+      loading={loading}
+      decoding="async"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
@@ -98,6 +134,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
 
         <div className="scene-frame" data-phase={phase}>
           <CanalScene
+            artwork={inDuel || phase === 'caught' ? fish?.artwork ?? null : null}
             description={`${copy.phase[phase]}. ${localize(selectedSpot.description, locale)}`}
             errorMessage={copy.sceneError}
             event={session?.lastEvent ?? null}
@@ -214,20 +251,37 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                   );
                 })}
               </div>
-              {session.lastCheck && (
-                <div className={`last-check last-check--${session.lastCheck.outcome}`} aria-live="polite" aria-atomic="true">
+              {session.lastAction && (
+                <div
+                  className={`last-check ${session.lastCheck ? `last-check--${session.lastCheck.outcome}` : 'last-check--no-roll'}`}
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
                   <div className="last-check__heading">
-                    <strong>{copy.lastCheck}</strong>
-                    <span>{copy.checkOutcome[session.lastCheck.outcome]} · {copy.mode[session.lastCheck.mode]}</span>
+                    <strong>{copy.lastAction}: {copy[session.lastAction]}</strong>
+                    <span>
+                      {session.lastCheck
+                        ? `${copy.checkOutcome[session.lastCheck.outcome]} · ${copy.mode[session.lastCheck.mode]}`
+                        : copy.noRoll}
+                    </span>
                   </div>
-                  <p>
-                    {copy.checkRolls}: {session.lastCheck.rolls.join(' / ')}
-                    {' · '}{copy.checkTotal}: {numberText(session.lastCheck.die, locale)}
-                    {' '}{session.lastCheck.modifier < 0 ? '−' : '+'} {numberText(Math.abs(session.lastCheck.modifier), locale)}
-                    {' = '}{numberText(session.lastCheck.total, locale)}
-                    {' · '}{copy.difficulty}: {numberText(session.lastCheck.difficulty, locale)}
-                  </p>
-                  <p>{copy.modeReason[session.lastCheck.modeReason]}</p>
+                  {session.lastCheck ? (
+                    <>
+                      <p>
+                        {copy.checkRolls}: {session.lastCheck.rolls.join(' / ')}
+                        {' · '}{copy.checkTotal}: {numberText(session.lastCheck.die, locale)}
+                        {' '}{session.lastCheck.modifier < 0 ? '−' : '+'} {numberText(Math.abs(session.lastCheck.modifier), locale)}
+                        {' = '}{numberText(session.lastCheck.total, locale)}
+                        {' · '}{copy.difficulty}: {numberText(session.lastCheck.difficulty, locale)}
+                      </p>
+                      <p>{copy.modeReason[session.lastCheck.modeReason]}</p>
+                    </>
+                  ) : (
+                    <p>{copy.actionHint[session.lastAction]}</p>
+                  )}
+                  {(session.lastEvent === 'fish-action' || session.lastEvent === 'line-damaged') && session.lastIntent && (
+                    <p>{copy.fishResponse}: {copy.intentHint[session.lastIntent]}</p>
+                  )}
                 </div>
               )}
             </>
@@ -240,6 +294,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           )}
           {phase === 'caught' && result && fish && (
             <section className="catch-reveal" aria-labelledby="catch-title">
+                <FishArtworkImage fish={fish} locale={locale} className="catch-reveal__artwork" loading="eager" />
               <div className="catch-reveal__copy">
                 <p className="catch-reveal__state">{copy.caught}</p>
                 <h3 id="catch-title">{localize(fish.name, locale)}</h3>
@@ -324,10 +379,14 @@ export function CollectionPanel({ copy, locale }: { copy: UiCopy; locale: Locale
 
           return (
             <li className={`fish-entry${discovered ? '' : ' fish-entry--unknown'}`} key={fish.id} data-rarity={fish.rarity}>
-              <span className="fish-mark" data-silhouette={fish.collection.silhouette} aria-hidden="true">
-                <span className="fish-mark__tail" />
-                <span className="fish-mark__body" />
-              </span>
+              {discovered ? (
+                <FishArtworkImage fish={fish} locale={locale} className="fish-entry__artwork" />
+              ) : (
+                <span className="fish-mark" data-silhouette={fish.collection.silhouette} aria-hidden="true">
+                  <span className="fish-mark__tail" />
+                  <span className="fish-mark__body" />
+                </span>
+              )}
               <div className="fish-entry__details">
                 <div className="fish-entry__heading">
                   <h3>{discovered ? localize(fish.name, locale) : '???'}</h3>

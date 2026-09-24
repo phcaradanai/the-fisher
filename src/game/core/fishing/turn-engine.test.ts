@@ -139,6 +139,16 @@ describe('turn fishing engine', () => {
     expect(released.lastCheck).toBe(initial.lastCheck);
   });
 
+  it('clears a prior check when RELEASE has no roll', () => {
+    const initial = withIntent(createTurnFishingSession(18, diverFish, balancedGear), 'steady-pull');
+    const checked = applyTurnFishingAction(initial, 'pull', diverFish, balancedGear).session;
+    expect(checked.lastCheck).not.toBeNull();
+
+    const released = applyTurnFishingAction(checked, 'release', diverFish, balancedGear).session;
+    expect(released.lastAction).toBe('release');
+    expect(released.lastCheck).toBeNull();
+  });
+
   it('previews the reason for matchup advantage and disadvantage', () => {
     const initial = createTurnFishingSession(21, diverFish, balancedGear);
     const dash = withIntent(initial, 'power-dash', 15);

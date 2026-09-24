@@ -11,6 +11,7 @@ export type GearCategory = 'rod' | 'reel' | 'line' | 'hook' | 'bait';
 export type TimeOfDay = 'morning' | 'day' | 'evening' | 'night';
 
 export interface FishDefinition extends FishProfile {
+  artwork: string;
   name: LocalizedText;
   description: LocalizedText;
   areaId: string;

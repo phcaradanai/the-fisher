@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { Application, Container, Graphics } from 'pixi.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Application, Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Rarity } from '../content/types';
 import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
 
 type CanalSceneProps = {
+  artwork: string | null;
   description: string;
   errorMessage: string;
   event: TurnCombatEvent | null;
@@ -20,9 +21,10 @@ type CanalSceneProps = {
 };
 
 const SCENE_WIDTH = 1200;
-const SCENE_HEIGHT = 680;
+const SCENE_HEIGHT = 900;
 
 export function CanalScene({
+  artwork,
   description,
   errorMessage,
   event,
@@ -38,7 +40,11 @@ export function CanalScene({
   tension,
 }: CanalSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const artworkSpriteRef = useRef<Sprite | null>(null);
+  const artworkRequestRef = useRef(0);
+  const artworkScaleRef = useRef(1);
   const sceneState = useRef({
+    artwork,
     event,
     eventSequence,
     fishAction,
@@ -52,8 +58,32 @@ export function CanalScene({
   });
   const [sceneError, setSceneError] = useState(false);
 
+  const loadArtwork = useCallback((path: string | null) => {
+    const sprite = artworkSpriteRef.current;
+    if (!sprite) return;
+
+    const request = ++artworkRequestRef.current;
+    sprite.visible = false;
+    sprite.texture = Texture.EMPTY;
+    if (!path) return;
+
+    void Assets.load<Texture>(path).then((texture) => {
+      if (request !== artworkRequestRef.current || artworkSpriteRef.current !== sprite) return;
+      sprite.texture = texture;
+      const scale = Math.min(SCENE_WIDTH / texture.width, SCENE_HEIGHT / texture.height);
+      artworkScaleRef.current = scale;
+      sprite.scale.set(scale);
+      sprite.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
+    }).catch(() => {
+      if (request === artworkRequestRef.current && artworkSpriteRef.current === sprite) {
+        sprite.texture = Texture.EMPTY;
+      }
+    });
+  }, []);
+
   useEffect(() => {
     sceneState.current = {
+      artwork,
       event,
       eventSequence,
       fishAction,
@@ -65,7 +95,11 @@ export function CanalScene({
       reducedMotion,
       tension,
     };
-  }, [event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion, tension]);
+  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion, tension]);
+
+  useEffect(() => {
+    loadArtwork(artwork);
+  }, [artwork, loadArtwork]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -107,8 +141,8 @@ export function CanalScene({
         const water = new Graphics()
           .rect(0, 302, SCENE_WIDTH, SCENE_HEIGHT - 302).fill({ color: 0x15565a })
           .rect(0, 302, SCENE_WIDTH, 7).fill({ color: 0x82a786, alpha: 0.76 })
-          .rect(0, 560, SCENE_WIDTH, 120).fill({ color: 0x103b43, alpha: 0.44 })
-          .rect(0, 615, SCENE_WIDTH, 65).fill({ color: 0x092f37, alpha: 0.42 });
+          .rect(0, SCENE_HEIGHT - 140, SCENE_WIDTH, 140).fill({ color: 0x103b43, alpha: 0.44 })
+          .rect(0, SCENE_HEIGHT - 75, SCENE_WIDTH, 75).fill({ color: 0x092f37, alpha: 0.42 });
         const distantHouses = new Graphics()
           .rect(105, 158, 116, 82).fill({ color: 0x9b7951 })
           .moveTo(92, 160).lineTo(163, 104).lineTo(235, 160).fill({ color: 0x674f3d })
@@ -140,6 +174,11 @@ export function CanalScene({
           .rect(104, 447, 14, 112).fill({ color: 0x755737 })
           .rect(282, 447, 14, 112).fill({ color: 0x755737 })
           .rect(93, 432, 224, 3).fill({ color: 0xc49a5a, alpha: 0.8 });
+        const sceneArtwork = new Sprite(Texture.EMPTY);
+        sceneArtwork.anchor.set(0.5);
+        sceneArtwork.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
+        sceneArtwork.visible = false;
+        artworkSpriteRef.current = sceneArtwork;
         const line = new Graphics();
         const bobber = new Container();
         const bobberBody = new Graphics()
@@ -158,8 +197,9 @@ export function CanalScene({
         fish.addChild(fishColor);
         const shadow = new Graphics().ellipse(0, 0, 102, 22).fill({ color: 0x082f36, alpha: 0.28 });
 
-        world.addChild(sky, farBank, water, distantHouses, reedLines, bridge, dock, line, bobber, shadow, fish);
+        world.addChild(sky, farBank, water, distantHouses, reedLines, bridge, dock, sceneArtwork, line, bobber, shadow, fish);
         app.stage.addChild(world);
+        loadArtwork(sceneState.current.artwork);
 
         const ripples = [
           new Graphics().ellipse(0, 0, 46, 7).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.58 }),
@@ -182,6 +222,20 @@ export function CanalScene({
           const motion = state.reducedMotion ? 0 : 1;
           elapsed += ticker.deltaMS * 0.001 * motion;
           const active = state.phase === 'player-turn';
+          const encounterVisible = active || state.phase === 'caught';
+          const artReady = sceneArtwork.texture !== Texture.EMPTY;
+          sceneArtwork.visible = encounterVisible && artReady;
+          if (sceneArtwork.visible) {
+            const artMotion = motion
+              ? state.bossPhase === 3
+                ? 1.025
+                : state.fishIntent === 'power-dash'
+                  ? 1.012 + Math.sin(elapsed * 8) * 0.004
+                  : 1.004 + Math.sin(elapsed * 1.2) * 0.005
+              : 1;
+            sceneArtwork.scale.set(artworkScaleRef.current * artMotion);
+          }
+
           const floatX = active ? 520 + Math.sin(elapsed * 0.8) * 9 : 500;
           const floatDepth = active && state.fishIntent === 'deep-dive'
             ? 24
@@ -204,14 +258,14 @@ export function CanalScene({
           fish.position.set(fishX + dash, 518 + diving + actionLift + Math.sin(elapsed * 1.8) * 5);
           fish.rotation = thrashing + actionTilt;
           fish.scale.set(size * eventPulse, (state.fishRarity === 'king' ? 1.28 : 0.9) * eventPulse);
-          fish.visible = active || state.phase === 'caught';
+          fish.visible = encounterVisible && !artReady;
           shadow.visible = fish.visible;
           shadow.position.set(fishX + dash, 557 + diving * 0.25);
           if (state.fishRarity === 'king') fishColor.tint = state.bossPhase === 3 ? 0xf07855 : 0xd7c78d;
           else if (state.fishRarity === 'rare') fishColor.tint = 0xc3cf85;
           else fishColor.tint = 0xffffff;
 
-          line.visible = active || state.phase === 'caught';
+          line.visible = encounterVisible;
           line.clear()
             .moveTo(293, 425)
             .bezierCurveTo(355, 351, 416, 343 + state.tension * 0.45, floatX, floatY - 24)
@@ -232,16 +286,17 @@ export function CanalScene({
     void start();
     return () => {
       disposed = true;
+      artworkRequestRef.current += 1;
+      artworkSpriteRef.current = null;
       resizeObserver?.disconnect();
       if (initialized) app.destroy(true, { children: true });
     };
-  }, []);
+  }, [loadArtwork]);
 
   return (
     <figure className="canal-scene" aria-label={`${spotName}. ${description}`}>
       <div className="canal-scene__canvas-host" ref={hostRef} aria-hidden="true" />
       {sceneError && <p className="canal-scene__error" role="status">{errorMessage}</p>}
-      <figcaption className="visually-hidden">{description}</figcaption>
     </figure>
   );
 }
