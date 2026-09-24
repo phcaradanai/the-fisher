@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { AREAS, FISH, FISHING_SPOTS, GEAR, STORY_EVENTS, getFishById, getFishingSpotById, getGearById } from '../../content';
 import type { FishDefinition, FishingSpotDefinition, GearCategory, GearDefinition, StoryEventDefinition } from '../../content/types';
-import { advanceFishingSession, applyFishingAction, castLine, createFishingSession } from '../core/fishing/engine';
+import { applyTurnFishingAction, createTurnFishingSession } from '../core/fishing/turn-engine';
 import { nextRandomFloat } from '../core/fishing/random';
-import type { FishingAction, FishingSession, GearEffects } from '../core/fishing/types';
+import { toTurnFishProfile, toTurnGearStats } from '../core/fishing/turn-adapter';
+import type { TurnFishingAction, TurnFishingSession, TurnGearStats } from '../core/fishing/turn-types';
 import { createDefaultSave, decodeSave, encodeSave } from './save';
-import type { FishRecord, SaveData } from './save';
+import type { SaveData } from './save';
 
 export type GameTab = 'fishing' | 'collection' | 'gear' | 'story';
 export type GameNotice =
@@ -22,13 +23,13 @@ export type GameNotice =
 export type SaveStatus = 'saved' | 'unavailable';
 
 export interface GameStore extends SaveData {
-  session: FishingSession;
+  session: TurnFishingSession | null;
+  sessionSeed: number;
   activeTab: GameTab;
   notice: GameNotice;
   saveStatus: SaveStatus;
   cast(): void;
-  advance(deltaMs: number): void;
-  act(action: Exclude<FishingAction, 'cast'>): void;
+  act(action: TurnFishingAction): void;
   selectSpot(spotId: string): void;
   setTab(tab: GameTab): void;
   buyGear(gearId: string): void;
@@ -44,20 +45,11 @@ export interface GameStore extends SaveData {
 const STORAGE_KEY = 'village-canal-save-v1';
 const GEAR_CATEGORIES: GearCategory[] = ['rod', 'reel', 'line', 'hook', 'bait'];
 
-const EFFECT_KEYS: (keyof GearEffects)[] = ['power', 'control', 'lineStrength', 'reelSpeed', 'attraction', 'skillPower'];
 const RARITY_WEIGHT: Record<FishDefinition['rarity'], number> = {
   common: 42,
   uncommon: 22,
   rare: 10,
   king: 14,
-};
-const EMPTY_EFFECTS: GearEffects = {
-  power: 0,
-  control: 0,
-  lineStrength: 0,
-  reelSpeed: 0,
-  attraction: 0,
-  skillPower: 0,
 };
 
 function createFreshSave(): SaveData {
@@ -109,7 +101,12 @@ function reconcileSave(saved: SaveData): SaveData {
   const seenStoryEvents = [...new Set(saved.seenStoryEvents.filter((id) => validEventIds.has(id)))];
   const fishCollection: SaveData['fishCollection'] = {};
   for (const [fishId, record] of Object.entries(saved.fishCollection)) {
-    if (validFishIds.has(fishId)) fishCollection[fishId] = record;
+    if (validFishIds.has(fishId)) {
+      fishCollection[fishId] = {
+        ...record,
+        knowledgeLevel: Math.max(record.knowledgeLevel, record.caught > 0 ? 1 : 0),
+      };
+    }
   }
 
   const unlockedSpotIds = unlockedSpots(seenStoryEvents);
@@ -149,22 +146,28 @@ function readInitialSave(): { save: SaveData; status: SaveStatus } {
   }
 }
 
-function getGearEffects(equippedGear: SaveData['equippedGear']): GearEffects {
-  const effects: GearEffects = { ...EMPTY_EFFECTS };
-  for (const category of GEAR_CATEGORIES) {
-    const gear = getGearById(equippedGear[category]);
-    if (!gear) continue;
-    for (const key of EFFECT_KEYS) {
-      effects[key] += gear.effects[key] ?? 0;
-    }
-  }
-  return effects;
+
+function encounterWeight(
+  spot: FishingSpotDefinition,
+  fish: FishDefinition,
+  bait: GearDefinition | undefined,
+  luck: number,
+): number {
+  const rarityWeight = RARITY_WEIGHT[fish.rarity];
+  const riskMultiplier = 1 + spot.risk * (fish.rarity === 'king' ? 1.6 : fish.rarity === 'rare' ? 0.7 : 0);
+  const baitMultiplier = bait
+    && (bait.baitTargets?.includes(fish.id) || fish.preferredBaitIds.includes(bait.id))
+    ? 1.7
+    : 1;
+  const luckMultiplier = 1 + Math.max(0, Math.min(luck, 20)) * fish.tier * 0.008;
+  return rarityWeight * riskMultiplier * baitMultiplier * luckMultiplier;
 }
 
 function pickEncounter(
   spot: FishingSpotDefinition,
   baitId: string,
   seed: number,
+  luck: number,
 ): { fish: FishDefinition | null; seed: number } {
   const draw = nextRandomFloat(seed);
   const bait = getGearById(baitId);
@@ -172,11 +175,7 @@ function pickEncounter(
 
   for (const fishId of spot.fishIds) {
     const fish = getFishById(fishId);
-    if (!fish) continue;
-    const rarityWeight = RARITY_WEIGHT[fish.rarity];
-    const riskMultiplier = 1 + spot.risk * (fish.rarity === 'king' ? 1.6 : fish.rarity === 'rare' ? 0.7 : 0);
-    const baitMultiplier = bait && (bait.baitTargets?.includes(fish.id) || fish.preferredBaitIds.includes(bait.id)) ? 1.7 : 1;
-    totalWeight += rarityWeight * riskMultiplier * baitMultiplier;
+    if (fish) totalWeight += encounterWeight(spot, fish, bait, luck);
   }
 
   if (totalWeight === 0) return { fish: null, seed: draw.seed };
@@ -185,10 +184,7 @@ function pickEncounter(
   for (const fishId of spot.fishIds) {
     const fish = getFishById(fishId);
     if (!fish) continue;
-    const rarityWeight = RARITY_WEIGHT[fish.rarity];
-    const riskMultiplier = 1 + spot.risk * (fish.rarity === 'king' ? 1.6 : fish.rarity === 'rare' ? 0.7 : 0);
-    const baitMultiplier = bait && (bait.baitTargets?.includes(fish.id) || fish.preferredBaitIds.includes(bait.id)) ? 1.7 : 1;
-    remainingWeight -= rarityWeight * riskMultiplier * baitMultiplier;
+    remainingWeight -= encounterWeight(spot, fish, bait, luck);
     if (remainingWeight <= 0) return { fish, seed: draw.seed };
   }
 
@@ -241,24 +237,34 @@ function makeSessionSeed(): number {
 const initial = readInitialSave();
 
 export const useGameStore = create<GameStore>((set, get) => {
-  const commitSave = (patch: Partial<SaveData>, runtime: Partial<Pick<GameStore, 'session' | 'notice'>> = {}) => {
+  const commitSave = (
+    patch: Partial<SaveData>,
+    runtime: Partial<Pick<GameStore, 'session' | 'sessionSeed' | 'notice'>> = {},
+  ) => {
     const nextSave = { ...saveProjection(get()), ...patch };
     const persisted = persistSave(nextSave);
     set({ ...patch, ...runtime, saveStatus: persisted ? 'saved' : 'unavailable' });
   };
 
   let equippedGearCache: SaveData['equippedGear'] | undefined;
-  let effectsCache: GearEffects = EMPTY_EFFECTS;
-  const effects = () => {
+  let turnGearStatsCache: TurnGearStats = {
+    power: 0,
+    control: 0,
+    lineStrength: 0,
+    reelSpeed: 0,
+    instinct: 0,
+    luck: 0,
+  };
+  const turnGearStats = () => {
     const equippedGear = get().equippedGear;
     if (equippedGear !== equippedGearCache) {
       equippedGearCache = equippedGear;
-      effectsCache = getGearEffects(equippedGear);
+      turnGearStatsCache = toTurnGearStats(getEquippedGearItems(get()));
     }
-    return effectsCache;
+    return turnGearStatsCache;
   };
 
-  const recordCatch = (session: FishingSession) => {
+  const recordCatch = (session: TurnFishingSession) => {
     const state = get();
     const result = session.result;
     if (!result) return;
@@ -266,20 +272,28 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (!fish) return;
 
     const previousRecord = state.fishCollection[fish.id];
-    const record: FishRecord = {
-      caught: (previousRecord?.caught ?? 0) + 1,
-      bestWeightKg: Math.max(previousRecord?.bestWeightKg ?? 0, result.weightKg),
-      largestLengthCm: Math.max(previousRecord?.largestLengthCm ?? 0, result.lengthCm),
+    const fishCollection = {
+      ...state.fishCollection,
+      [fish.id]: {
+        caught: (previousRecord?.caught ?? 0) + 1,
+        bestWeightKg: Math.max(previousRecord?.bestWeightKg ?? 0, result.weightKg),
+        largestLengthCm: Math.max(previousRecord?.largestLengthCm ?? 0, result.lengthCm),
+        knowledgeLevel: Math.max(previousRecord?.knowledgeLevel ?? 0, 1),
+      },
     };
-    const fishCollection = { ...state.fishCollection, [fish.id]: record };
-    const firstCatch = Object.keys(state.fishCollection).length === 0;
+    const firstCatch = Object.values(state.fishCollection).every((record) => record.caught === 0);
     let seenStoryEvents = firstCatch ? triggeredEvents(state.seenStoryEvents, 'first-catch') : state.seenStoryEvents;
-    if (!previousRecord) seenStoryEvents = triggeredEvents(seenStoryEvents, 'fish-discovered');
+    if (!previousRecord || previousRecord.knowledgeLevel === 0) {
+      seenStoryEvents = triggeredEvents(seenStoryEvents, 'fish-discovered');
+    }
 
-    const uniqueFishCount = Object.keys(fishCollection).length;
+    let uniqueCaughtCount = 0;
+    for (const record of Object.values(fishCollection)) {
+      if (record.caught > 0) uniqueCaughtCount += 1;
+    }
     const hasRumor = STORY_EVENTS.some((event) => event.trigger === 'fish-discovered' && seenStoryEvents.includes(event.id));
     const needsSpotUnlock = STORY_EVENTS.some((event) => event.trigger === 'spot-unlocked' && !seenStoryEvents.includes(event.id));
-    if (uniqueFishCount >= 4 && hasRumor && needsSpotUnlock) {
+    if (uniqueCaughtCount >= 4 && hasRumor && needsSpotUnlock) {
       seenStoryEvents = triggeredEvents(seenStoryEvents, 'spot-unlocked');
     }
     if (fish.rarity === 'king') seenStoryEvents = triggeredEvents(seenStoryEvents, 'king-caught');
@@ -292,12 +306,37 @@ export const useGameStore = create<GameStore>((set, get) => {
       seenStoryEvents,
       unlockedSpotIds,
       selectedSpotId,
-    }, { session, notice: null });
+    }, { session, sessionSeed: session.seed, notice: null });
+  };
+
+  const recordObservation = (fishId: string, session: TurnFishingSession) => {
+    const state = get();
+    const previousRecord = state.fishCollection[fishId];
+    const knowledgeLevel = previousRecord?.knowledgeLevel ?? 0;
+    if (knowledgeLevel >= 3) {
+      set({ session, sessionSeed: session.seed, notice: null });
+      return;
+    }
+
+    const fishCollection = {
+      ...state.fishCollection,
+      [fishId]: {
+        caught: previousRecord?.caught ?? 0,
+        bestWeightKg: previousRecord?.bestWeightKg ?? 0,
+        largestLengthCm: previousRecord?.largestLengthCm ?? 0,
+        knowledgeLevel: knowledgeLevel + 1,
+      },
+    };
+    const seenStoryEvents = knowledgeLevel === 0
+      ? triggeredEvents(state.seenStoryEvents, 'fish-discovered')
+      : state.seenStoryEvents;
+    commitSave({ fishCollection, seenStoryEvents }, { session, sessionSeed: session.seed, notice: null });
   };
 
   return {
     ...initial.save,
-    session: createFishingSession(makeSessionSeed()),
+    session: null,
+    sessionSeed: makeSessionSeed(),
     activeTab: 'fishing',
     notice: null,
     saveStatus: initial.status,
@@ -308,45 +347,53 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({ notice: 'locked-spot' });
         return;
       }
-      if (state.session.phase !== 'ready' && state.session.phase !== 'escaped' && state.session.phase !== 'line-break') {
+      if (state.session?.phase === 'player-turn' || state.session?.phase === 'caught') {
         set({ notice: 'not-caught' });
         return;
       }
 
-      const readySession = state.session.phase === 'ready' ? state.session : createFishingSession(state.session.seed);
-      const encounter = pickEncounter(spot, state.selectedBaitId, readySession.seed);
+      const stats = turnGearStats();
+      const encounter = pickEncounter(spot, state.selectedBaitId, state.sessionSeed, stats.luck);
       if (!encounter.fish) {
         set({ notice: 'no-fish' });
         return;
       }
-      const seededSession = { ...readySession, seed: encounter.seed };
-      const session = castLine(seededSession, encounter.fish, effects());
-      set({ session, notice: null });
-    },
-    advance(deltaMs) {
-      const state = get();
-      if (state.session.phase !== 'casting' && state.session.phase !== 'waiting' && state.session.phase !== 'bite' && state.session.phase !== 'fighting') return;
-      const fish = state.session.fishId ? getFishById(state.session.fishId) : undefined;
-      if (!fish) return;
-      const session = advanceFishingSession(state.session, deltaMs, fish, effects());
-      if (session.phase === 'caught') {
-        recordCatch(session);
-      } else {
-        set({ session });
-      }
+      const session = createTurnFishingSession(
+        encounter.seed,
+        toTurnFishProfile(encounter.fish),
+        stats,
+      );
+      set({ session, sessionSeed: session.seed, notice: null });
     },
     act(action) {
       const state = get();
-      const fish = state.session.fishId ? getFishById(state.session.fishId) : undefined;
+      const currentSession = state.session;
+      if (!currentSession || currentSession.phase !== 'player-turn') {
+        set({ notice: 'not-caught' });
+        return;
+      }
+      const fish = getActiveFish(currentSession);
       if (!fish) {
         set({ notice: 'not-caught' });
         return;
       }
-      const session = applyFishingAction(state.session, action, fish, effects());
-      if (state.session.phase !== 'caught' && session.phase === 'caught') {
-        recordCatch(session);
+
+      const resolution = applyTurnFishingAction(
+        currentSession,
+        action,
+        toTurnFishProfile(fish),
+        turnGearStats(),
+      );
+      if (resolution.session.phase === 'caught') {
+        recordCatch(resolution.session);
+      } else if (resolution.observationSucceeded) {
+        recordObservation(fish.id, resolution.session);
       } else {
-        set({ session, notice: null });
+        set({
+          session: resolution.session,
+          sessionSeed: resolution.session.seed,
+          notice: null,
+        });
       }
     },
     selectSpot(spotId) {
@@ -355,19 +402,25 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({ notice: 'locked-spot' });
         return;
       }
-      if (state.session.phase === 'fighting' || state.session.phase === 'bite' || state.session.phase === 'caught') {
+      if (state.session?.phase === 'player-turn' || state.session?.phase === 'caught') {
         set({ notice: 'not-caught' });
         return;
       }
-      const nextSave = { selectedSpotId: spotId };
-      const session = createFishingSession(state.session.seed);
-      commitSave(nextSave, { session, notice: null });
+      commitSave({ selectedSpotId: spotId }, {
+        session: null,
+        sessionSeed: state.session?.seed ?? state.sessionSeed,
+        notice: null,
+      });
     },
     setTab(tab) {
       set({ activeTab: tab, notice: null });
     },
     buyGear(gearId) {
       const state = get();
+      if (state.session?.phase === 'player-turn' || state.session?.phase === 'caught') {
+        set({ notice: 'not-caught' });
+        return;
+      }
       const gear = getGearById(gearId);
       if (!gear) return;
       if (state.ownedGearIds.includes(gear.id)) {
@@ -386,6 +439,10 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
     equipGear(gearId) {
       const state = get();
+      if (state.session?.phase === 'player-turn' || state.session?.phase === 'caught') {
+        set({ notice: 'not-caught' });
+        return;
+      }
       const gear = getGearById(gearId);
       if (!gear || !state.ownedGearIds.includes(gear.id)) {
         set({ notice: 'gear-locked' });
@@ -398,8 +455,9 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
     settleCatch(disposition) {
       const state = get();
-      const result = state.session.result;
-      if (state.session.phase !== 'caught' || !result) {
+      const session = state.session;
+      const result = session?.result;
+      if (session?.phase !== 'caught' || !result) {
         set({ notice: 'not-caught' });
         return;
       }
@@ -408,17 +466,17 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({ notice: 'no-fish' });
         return;
       }
-      const nextSession = createFishingSession(state.session.seed);
+      const runtime = { session: null, sessionSeed: session.seed };
       if (disposition === 'sell') {
-        commitSave({ coins: state.coins + fish.sellValue }, { session: nextSession, notice: 'sold' });
+        commitSave({ coins: state.coins + fish.sellValue }, { ...runtime, notice: 'sold' });
       } else {
-        commitSave({ keptFish: state.keptFish + 1 }, { session: nextSession, notice: 'kept' });
+        commitSave({ keptFish: state.keptFish + 1 }, { ...runtime, notice: 'kept' });
       }
     },
     restartSession() {
-      const state = get();
-      if (state.session.phase !== 'escaped' && state.session.phase !== 'line-break') return;
-      set({ session: createFishingSession(state.session.seed), notice: null });
+      const session = get().session;
+      if (session?.phase !== 'escaped' && session?.phase !== 'line-break') return;
+      set({ session: null, sessionSeed: session.seed, notice: null });
     },
     setLocale(locale) {
       commitSave({ locale });
@@ -435,8 +493,8 @@ export const useGameStore = create<GameStore>((set, get) => {
   };
 });
 
-export function getActiveFish(session: FishingSession): FishDefinition | null {
-  return session.fishId ? getFishById(session.fishId) ?? null : null;
+export function getActiveFish(session: TurnFishingSession | null): FishDefinition | null {
+  return session ? getFishById(session.fishId) ?? null : null;
 }
 
 export function hasCaughtKing(state: Pick<GameStore, 'fishCollection'>): boolean {

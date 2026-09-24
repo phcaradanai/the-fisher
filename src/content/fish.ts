@@ -283,10 +283,10 @@ export const FISH = [
     behavior: 'king',
     stats: { power: 96, stamina: 100, speed: 68, technique: 92 },
     sizeRangeCm: { min: 118, max: 186 },
-    name: { th: 'ราชาปลาเฒ่า', en: 'Old River King' },
+    name: { th: 'พญาช่อนเงาจันทร์', en: 'Moon Shadow Snakehead' },
     description: {
-      th: 'ราชาปลาเพียงหนึ่งเดียวในแอ่งลึก ใช้แรงต้านเป็นจังหวะ สะบัดตัวเปลี่ยนทิศ และพุ่งหนีเป็นชุดอย่างคาดเดายาก',
-      en: 'The canal’s sole King Fish: it alternates crushing holds, sudden direction changes, and chained surges that demand careful timing.',
+      th: 'พญาช่อนเงาจันทร์เปิดฉากด้วยการดึงเป็นจังหวะ ก่อนเข้าสู่ช่วงคลั่งกลางศึกและเร่งหนีเมื่อแรงใกล้หมด',
+      en: 'The Moon Shadow Snakehead begins with measured pulls, surges into a mid-fight frenzy, then makes a desperate distance run when exhausted.',
     },
     areaId: 'village-canal',
     spotIds: ['deep-pool'],
@@ -302,6 +302,10 @@ export const FISH = [
       silhouette: 'fish-silhouette-old-river-king',
     },
     weightFactor: 14.8,
-    combat: { archetype: 'berserker', resistance: 96 },
+    combat: {
+      archetype: 'berserker',
+      resistance: 96,
+      bossPhases: { frenzyAt: 0.6, desperateAt: 0.25 },
+    },
   },
 ] satisfies FishDefinition[];

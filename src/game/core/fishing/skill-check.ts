@@ -1,5 +1,5 @@
 import { nextRandomFloat } from './random';
-import type { CheckMode, CheckOutcome, SkillCheckResult } from './turn-types';
+import type { CheckMode, CheckModeReason, CheckOutcome, SkillCheckResult } from './turn-types';
 
 function rollOne(seed: number): { seed: number; die: number } {
   const next = nextRandomFloat(seed);
@@ -25,6 +25,7 @@ export function resolveSkillCheck(
   mode: CheckMode,
   modifier: number,
   difficulty: number,
+  modeReason: CheckModeReason = 'neutral',
 ): { seed: number; result: SkillCheckResult } {
   const first = rollOne(seed);
   let finalSeed = first.seed;
@@ -48,6 +49,7 @@ export function resolveSkillCheck(
     seed: finalSeed,
     result: {
       mode,
+      modeReason,
       rolls,
       die,
       modifier: safeModifier,

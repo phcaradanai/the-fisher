@@ -1,8 +1,4 @@
-export type TurnCombatPhase =
-  | 'player-turn'
-  | 'caught'
-  | 'escaped'
-  | 'line-break';
+export type TurnCombatPhase = 'ready' | 'player-turn' | 'caught' | 'escaped' | 'line-break';
 
 export type TurnFishingAction = 'reel' | 'pull' | 'release' | 'brace' | 'observe';
 
@@ -15,12 +11,7 @@ export type FishArchetype =
   | 'endurance'
   | 'berserker';
 
-export type FishIntentType =
-  | 'steady-pull'
-  | 'power-dash'
-  | 'deep-dive'
-  | 'thrash'
-  | 'recover';
+export type FishIntentType = 'steady-pull' | 'power-dash' | 'deep-dive' | 'thrash' | 'recover';
 
 export type CheckMode = 'advantage' | 'normal' | 'disadvantage';
 
@@ -31,6 +22,13 @@ export type CheckOutcome =
   | 'success'
   | 'critical-success';
 
+export type CheckModeReason =
+  | 'observed-insight'
+  | 'brace-counter'
+  | 'poor-response'
+  | 'recovery-window'
+  | 'neutral';
+
 export interface TurnFishProfile {
   id: string;
   archetype: FishArchetype;
@@ -40,6 +38,15 @@ export interface TurnFishProfile {
     speed: number;
     technique: number;
     resistance: number;
+  };
+  sizeRangeCm: {
+    min: number;
+    max: number;
+  };
+  catchDistance?: number;
+  bossPhases?: {
+    frenzyAt: number;
+    desperateAt: number;
   };
 }
 
@@ -59,6 +66,7 @@ export interface FishIntent {
 
 export interface SkillCheckResult {
   mode: CheckMode;
+  modeReason: CheckModeReason;
   rolls: number[];
   die: number;
   modifier: number;
@@ -75,12 +83,16 @@ export type TurnCombatEvent =
   | 'action-observe'
   | 'fish-action'
   | 'fish-intent'
-  | 'fish-staggered'
-  | 'tension-warning'
   | 'line-damaged'
   | 'caught'
   | 'escaped'
   | 'line-break';
+
+export interface TurnCatchResult {
+  fishId: string;
+  lengthCm: number;
+  weightKg: number;
+}
 
 export interface TurnFishingSession {
   phase: TurnCombatPhase;
@@ -97,14 +109,26 @@ export interface TurnFishingSession {
   lineDurability: number;
   maxLineDurability: number;
   currentIntent: FishIntent;
+  bossPhase: 1 | 2 | 3 | null;
   braced: boolean;
   releasedThisTurn: boolean;
   insight: boolean;
+  lastAction: TurnFishingAction | null;
+  lastIntent: FishIntentType | null;
   lastCheck: SkillCheckResult | null;
   lastEvent: TurnCombatEvent | null;
+  eventSequence: number;
+  result: TurnCatchResult | null;
 }
 
 export interface TurnActionResolution {
   session: TurnFishingSession;
-  knowledgeDiscovered: boolean;
+  observationSucceeded: boolean;
+}
+
+export interface TurnActionPreview {
+  mode: CheckMode | null;
+  modeReason: CheckModeReason | null;
+  modifier: number;
+  difficulty: number | null;
 }

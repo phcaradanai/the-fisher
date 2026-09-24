@@ -1,4 +1,4 @@
-import type { FishDefinition, GearDefinition } from '../../content/types';
+import type { FishDefinition, GearDefinition } from '../../../content/types';
 import type { FishArchetype, TurnFishProfile, TurnGearStats } from './turn-types';
 
 function fallbackArchetype(behavior: FishDefinition['behavior']): FishArchetype {
@@ -15,6 +15,14 @@ function fallbackArchetype(behavior: FishDefinition['behavior']): FishArchetype 
 }
 
 export function toTurnFishProfile(fish: FishDefinition): TurnFishProfile {
+  const catchDistance = fish.rarity === 'common'
+    ? 24
+    : fish.rarity === 'uncommon'
+      ? 18
+      : fish.rarity === 'rare'
+        ? 15
+        : 12;
+
   return {
     id: fish.id,
     archetype: fish.combat?.archetype ?? fallbackArchetype(fish.behavior),
@@ -26,6 +34,9 @@ export function toTurnFishProfile(fish: FishDefinition): TurnFishProfile {
       resistance: fish.combat?.resistance
         ?? Math.round((fish.stats.power + fish.stats.technique) / 2),
     },
+    sizeRangeCm: fish.sizeRangeCm,
+    catchDistance,
+    bossPhases: fish.combat?.bossPhases,
   };
 }
 
@@ -36,7 +47,7 @@ export function toTurnGearStats(items: readonly GearDefinition[]): TurnGearStats
     lineStrength: stats.lineStrength + (item.effects.lineStrength ?? 0),
     reelSpeed: stats.reelSpeed + (item.effects.reelSpeed ?? 0),
     instinct: stats.instinct + (item.effects.skillPower ?? 0),
-    luck: stats.luck,
+    luck: stats.luck + (item.effects.attraction ?? 0),
   }), {
     power: 0,
     control: 0,

@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
-import type { FishingPhase } from '../game/core/fishing/types';
 import type { Rarity } from '../content/types';
+import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
 
 type CanalSceneProps = {
   description: string;
   errorMessage: string;
-  fishDirection: -1 | 1;
+  event: TurnCombatEvent | null;
+  eventSequence: number;
+  fishAction: TurnFishingAction | null;
   fishDistance: number;
+  fishIntent: FishIntentType | null;
   fishRarity: Rarity | null;
-  phase: FishingPhase;
+  phase: TurnCombatPhase;
+  bossPhase: 1 | 2 | 3 | null;
   reducedMotion: boolean;
   spotName: string;
   tension: number;
@@ -21,21 +25,47 @@ const SCENE_HEIGHT = 680;
 export function CanalScene({
   description,
   errorMessage,
+  event,
+  eventSequence,
+  fishAction,
   fishDistance,
-  fishDirection,
+  fishIntent,
   fishRarity,
   phase,
+  bossPhase,
   reducedMotion,
   spotName,
   tension,
 }: CanalSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const sceneState = useRef({ fishDirection, fishDistance, fishRarity, phase, reducedMotion, tension });
+  const sceneState = useRef({
+    event,
+    eventSequence,
+    fishAction,
+    fishDistance,
+    fishIntent,
+    fishRarity,
+    phase,
+    bossPhase,
+    reducedMotion,
+    tension,
+  });
   const [sceneError, setSceneError] = useState(false);
 
   useEffect(() => {
-    sceneState.current = { fishDirection, fishDistance, fishRarity, phase, reducedMotion, tension };
-  }, [fishDirection, fishDistance, fishRarity, phase, reducedMotion, tension]);
+    sceneState.current = {
+      event,
+      eventSequence,
+      fishAction,
+      fishDistance,
+      fishIntent,
+      fishRarity,
+      phase,
+      bossPhase,
+      reducedMotion,
+      tension,
+    };
+  }, [event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion, tension]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -77,7 +107,8 @@ export function CanalScene({
         const water = new Graphics()
           .rect(0, 302, SCENE_WIDTH, SCENE_HEIGHT - 302).fill({ color: 0x15565a })
           .rect(0, 302, SCENE_WIDTH, 7).fill({ color: 0x82a786, alpha: 0.76 })
-          .rect(0, 560, SCENE_WIDTH, 120).fill({ color: 0x103b43, alpha: 0.44 });
+          .rect(0, 560, SCENE_WIDTH, 120).fill({ color: 0x103b43, alpha: 0.44 })
+          .rect(0, 615, SCENE_WIDTH, 65).fill({ color: 0x092f37, alpha: 0.42 });
         const distantHouses = new Graphics()
           .rect(105, 158, 116, 82).fill({ color: 0x9b7951 })
           .moveTo(92, 160).lineTo(163, 104).lineTo(235, 160).fill({ color: 0x674f3d })
@@ -112,25 +143,28 @@ export function CanalScene({
         const line = new Graphics();
         const bobber = new Container();
         const bobberBody = new Graphics()
-          .ellipse(0, 0, 12, 24).fill({ color: 0xf07855 })
-          .rect(-11, -4, 22, 8).fill({ color: 0xf0d69a })
-          .ellipse(0, -20, 4, 5).fill({ color: 0x493d30 });
+          .ellipse(0, 0, 13, 28).fill({ color: 0xf07855 })
+          .rect(-12, -5, 24, 10).fill({ color: 0xf0d69a })
+          .ellipse(0, -24, 5, 6).fill({ color: 0x493d30 });
         bobber.addChild(bobberBody);
         const fish = new Container();
         const fishColor = new Graphics()
-          .moveTo(-46, 0).lineTo(-78, -25).lineTo(-78, 25).closePath().fill({ color: 0xe4ae61 })
-          .ellipse(-8, 0, 44, 22).fill({ color: 0xe4ae61 })
-          .moveTo(-10, -18).lineTo(8, -38).lineTo(22, -15).closePath().fill({ color: 0xb57c4a })
-          .ellipse(22, -5, 3, 3).fill({ color: 0x253d39 });
+          .moveTo(-62, 0).lineTo(-114, -40).lineTo(-108, 0).lineTo(-114, 40).closePath().fill({ color: 0xe4ae61 })
+          .ellipse(-7, 0, 68, 36).fill({ color: 0xe4ae61 })
+          .moveTo(-12, -30).lineTo(8, -61).lineTo(31, -26).closePath().fill({ color: 0xb57c4a })
+          .moveTo(14, 29).lineTo(37, 53).lineTo(45, 26).closePath().fill({ color: 0xb57c4a })
+          .ellipse(39, -7, 5, 5).fill({ color: 0x253d39 })
+          .ellipse(40, -7, 1.6, 1.6).fill({ color: 0xf0d69a });
         fish.addChild(fishColor);
+        const shadow = new Graphics().ellipse(0, 0, 102, 22).fill({ color: 0x082f36, alpha: 0.28 });
 
-        world.addChild(sky, farBank, water, distantHouses, reedLines, bridge, dock, line, bobber, fish);
+        world.addChild(sky, farBank, water, distantHouses, reedLines, bridge, dock, line, bobber, shadow, fish);
         app.stage.addChild(world);
 
         const ripples = [
-          new Graphics().ellipse(0, 0, 38, 5).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.58 }),
-          new Graphics().ellipse(0, 0, 23, 4).stroke({ color: 0xd4d6a7, width: 1.5, alpha: 0.66 }),
-          new Graphics().ellipse(0, 0, 12, 3).stroke({ color: 0xe4dfb3, width: 1, alpha: 0.52 }),
+          new Graphics().ellipse(0, 0, 46, 7).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.58 }),
+          new Graphics().ellipse(0, 0, 29, 5).stroke({ color: 0xd4d6a7, width: 1.5, alpha: 0.66 }),
+          new Graphics().ellipse(0, 0, 15, 3).stroke({ color: 0xe4dfb3, width: 1, alpha: 0.52 }),
         ] as const;
         for (const ripple of ripples) world.addChild(ripple);
 
@@ -147,30 +181,44 @@ export function CanalScene({
           const state = sceneState.current;
           const motion = state.reducedMotion ? 0 : 1;
           elapsed += ticker.deltaMS * 0.001 * motion;
-          const active = state.phase === 'waiting' || state.phase === 'bite' || state.phase === 'fighting';
+          const active = state.phase === 'player-turn';
           const floatX = active ? 520 + Math.sin(elapsed * 0.8) * 9 : 500;
-          const floatDepth = state.phase === 'bite' ? 34 : state.phase === 'fighting' ? Math.min(state.tension * 0.12, 10) : 0;
-          const floatY = 327 + floatDepth + Math.sin(elapsed * (state.phase === 'bite' ? 8 : 2)) * (state.phase === 'bite' ? 2 : 4);
+          const floatDepth = active && state.fishIntent === 'deep-dive'
+            ? 24
+            : active && state.fishIntent === 'power-dash'
+              ? -14
+              : state.phase === 'caught' ? 32 : 0;
+          const floatY = 327 + floatDepth + Math.sin(elapsed * (state.event === 'action-brace' ? 5 : 2)) * (active ? 3 : 1);
           bobber.position.set(floatX, floatY);
-          bobber.rotation = state.phase === 'fighting' ? Math.min(state.tension, 100) * 0.0015 : 0;
+          bobber.rotation = active ? Math.min(state.tension, 100) * 0.0015 : 0;
 
-          const distance = Math.max(0, Math.min(1, state.fishDistance));
-          fish.position.set(860 - distance * 310, 515 + Math.sin(elapsed * 1.8) * 10);
-          fish.scale.set((state.phase === 'fighting' ? 1 + Math.sin(elapsed * 2) * 0.05 : 0.88) * state.fishDirection, 1);
-          fish.visible = state.phase === 'fighting' || state.phase === 'caught';
-          if (state.fishRarity === 'king') fishColor.tint = 0xf07855;
+          const distance = Math.max(0, Math.min(1, state.fishDistance / 100));
+          const fishX = 845 - distance * 400;
+          const dash = state.fishIntent === 'power-dash' && active ? Math.sin(elapsed * 10) * 18 : 0;
+          const diving = state.fishIntent === 'deep-dive' && active ? 48 : 0;
+          const thrashing = state.fishIntent === 'thrash' && active ? Math.sin(elapsed * 12) * 0.15 : 0;
+          const actionLift = state.fishAction === 'pull' ? -12 : state.fishAction === 'release' ? 8 : 0;
+          const actionTilt = state.fishAction === 'brace' ? -0.05 : state.fishAction === 'observe' ? 0.05 : 0;
+          const size = state.fishRarity === 'king' ? 1.28 : state.fishRarity === 'rare' ? 1.12 : 0.9;
+          const eventPulse = active && state.eventSequence % 2 === 0 ? 1.04 : 1;
+          fish.position.set(fishX + dash, 518 + diving + actionLift + Math.sin(elapsed * 1.8) * 5);
+          fish.rotation = thrashing + actionTilt;
+          fish.scale.set(size * eventPulse, (state.fishRarity === 'king' ? 1.28 : 0.9) * eventPulse);
+          fish.visible = active || state.phase === 'caught';
+          shadow.visible = fish.visible;
+          shadow.position.set(fishX + dash, 557 + diving * 0.25);
+          if (state.fishRarity === 'king') fishColor.tint = state.bossPhase === 3 ? 0xf07855 : 0xd7c78d;
           else if (state.fishRarity === 'rare') fishColor.tint = 0xc3cf85;
           else fishColor.tint = 0xffffff;
 
+          line.visible = active || state.phase === 'caught';
           line.clear()
             .moveTo(293, 425)
-            .bezierCurveTo(355, 351, 416, 343 + state.tension * 0.45, floatX, floatY - 20)
-            .stroke({ color: state.tension > 70 ? 0xf07855 : 0xe8dfbd, width: 2, alpha: 0.94 });
+            .bezierCurveTo(355, 351, 416, 343 + state.tension * 0.45, floatX, floatY - 24)
+            .stroke({ color: state.tension > 70 ? 0xf07855 : 0xe8dfbd, width: 2.5, alpha: 0.94 });
 
           const rippleX = active ? floatX : 500;
-          ripples[0].position.set(rippleX, 354);
-          ripples[1].position.set(rippleX, 354);
-          ripples[2].position.set(rippleX, 354);
+          for (const ripple of ripples) ripple.position.set(rippleX, 356);
           const rippleScale = state.reducedMotion ? 1 : 0.74 + ((Math.sin(elapsed * 1.2) + 1) / 2) * 0.48;
           ripples[0].scale.set(rippleScale);
           ripples[1].scale.set(rippleScale * 0.88);

@@ -6,12 +6,27 @@ describe('local save format', () => {
     const save = createDefaultSave();
     save.coins = 840;
     save.reputation = 72;
-    save.fishCollection['reed-carp'] = { caught: 3, bestWeightKg: 1.4, largestLengthCm: 42 };
+    save.fishCollection['reed-carp'] = { caught: 3, bestWeightKg: 1.4, largestLengthCm: 42, knowledgeLevel: 0 };
     save.unlockedSpotIds.push('wooden-bridge');
     save.locale = 'en';
     save.keptFish = 1;
 
     expect(decodeSave(encodeSave(save))).toEqual(save);
+  });
+  it('defaults new knowledge history for existing version-one collection entries', () => {
+    const legacy = {
+      ...createDefaultSave(),
+      fishCollection: {
+        'river-minnow': { caught: 1, bestWeightKg: 0.04, largestLengthCm: 16 },
+      },
+    };
+
+    expect(decodeSave(JSON.stringify(legacy))?.fishCollection['river-minnow']).toEqual({
+      caught: 1,
+      bestWeightKg: 0.04,
+      largestLengthCm: 16,
+      knowledgeLevel: 0,
+    });
   });
 
   it('does not load saves from an unsupported schema version', () => {

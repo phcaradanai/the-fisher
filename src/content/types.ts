@@ -33,6 +33,10 @@ export interface FishDefinition extends FishProfile {
   combat?: {
     archetype: FishArchetype;
     resistance?: number;
+    bossPhases?: {
+      frenzyAt: number;
+      desperateAt: number;
+    };
   };
 }
 

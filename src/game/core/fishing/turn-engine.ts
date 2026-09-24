@@ -2,68 +2,96 @@ import { nextRandomFloat } from './random';
 import { resolveSkillCheck } from './skill-check';
 import type {
   CheckMode,
+  CheckModeReason,
   CheckOutcome,
   FishIntent,
   FishIntentType,
+  TurnActionPreview,
   TurnActionResolution,
-  TurnFishProfile,
+  TurnCatchResult,
+  TurnCombatEvent,
   TurnFishingAction,
   TurnFishingSession,
+  TurnFishProfile,
   TurnGearStats,
 } from './turn-types';
 
-const DEFAULT_AP = 2;
-const DEFAULT_DISTANCE = 45;
-const DEFAULT_TENSION = 35;
-const DEFAULT_MAX_DISTANCE = 100;
-const DEFAULT_LINE_DURABILITY = 100;
+const AP_PER_TURN = 2;
+const START_DISTANCE = 44;
+const START_TENSION = 34;
+const MAX_DISTANCE = 100;
+const CATCH_DISTANCE = 15;
+const INTENT_ORDER: FishIntentType[] = [
+  'steady-pull',
+  'power-dash',
+  'deep-dive',
+  'thrash',
+  'recover',
+];
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
-
-const rating = (value: number): number => clamp(value, 0, 100);
-const gear = (value: number): number => clamp(value, -10, 20);
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 function outcomeScale(outcome: CheckOutcome): number {
   switch (outcome) {
     case 'critical-failure':
       return 0;
     case 'failure':
-      return 0.25;
+      return 0.35;
     case 'partial-success':
-      return 0.6;
+      return 0.7;
     case 'success':
       return 1;
     case 'critical-success':
-      return 1.5;
+      return 1.25;
   }
 }
 
-function intentDifficulty(type: FishIntentType, fish: TurnFishProfile): number {
-  const power = rating(fish.stats.power);
-  const speed = rating(fish.stats.speed);
-  const technique = rating(fish.stats.technique);
-  const resistance = rating(fish.stats.resistance);
+function bossPhaseFor(fish: TurnFishProfile, stamina: number): 1 | 2 | 3 | null {
+  const phases = fish.bossPhases;
+  if (!phases) return null;
+
+  const staminaRatio = stamina / Math.max(1, fish.stats.stamina);
+  if (staminaRatio <= phases.desperateAt) return 3;
+  if (staminaRatio <= phases.frenzyAt) return 2;
+  return 1;
+}
+
+function intentDifficulty(
+  type: FishIntentType,
+  fish: TurnFishProfile,
+  phase: 1 | 2 | 3 | null,
+): number {
+  const phasePressure = phase === 3 ? 2 : phase === 2 ? 1 : 0;
+  let difficulty: number;
 
   switch (type) {
     case 'steady-pull':
-      return 9 + Math.round((power + technique) / 40);
+      difficulty = 7 + fish.stats.technique * 0.05 + fish.stats.resistance * 0.02;
+      break;
     case 'power-dash':
-      return 10 + Math.round((power + speed) / 32);
+      difficulty = 8 + fish.stats.power * 0.05 + fish.stats.speed * 0.035;
+      break;
     case 'deep-dive':
-      return 10 + Math.round((power + resistance) / 32);
+      difficulty = 8 + fish.stats.resistance * 0.04 + fish.stats.technique * 0.025;
+      break;
     case 'thrash':
-      return 10 + Math.round((power + technique) / 30);
+      difficulty = 8 + fish.stats.power * 0.04 + fish.stats.technique * 0.035;
+      break;
     case 'recover':
-      return 9 + Math.round((technique + resistance) / 42);
+      difficulty = 8 + fish.stats.technique * 0.05;
+      break;
   }
+
+  return clamp(Math.round(difficulty + phasePressure), 5, 35);
 }
 
-function weightedIntent(seed: number, fish: TurnFishProfile, staminaRatio: number): {
-  seed: number;
-  intent: FishIntent;
-} {
-  const random = nextRandomFloat(seed);
+function intentWeights(
+  archetype: TurnFishProfile['archetype'],
+  staminaRatio: number,
+  phase: 1 | 2 | 3 | null,
+): Record<FishIntentType, number> {
   const weights: Record<FishIntentType, number> = {
     'steady-pull': 20,
     'power-dash': 20,
@@ -72,103 +100,219 @@ function weightedIntent(seed: number, fish: TurnFishProfile, staminaRatio: numbe
     recover: 20,
   };
 
-  switch (fish.archetype) {
+  switch (archetype) {
     case 'calm':
-      Object.assign(weights, { 'steady-pull': 45, 'power-dash': 12, 'deep-dive': 12, thrash: 12, recover: 19 });
+      weights['steady-pull'] = 42;
+      weights.recover = staminaRatio < 0.72 ? 30 : 18;
+      weights['power-dash'] = 12;
+      weights['deep-dive'] = 8;
+      weights.thrash = 8;
       break;
     case 'sprinter':
-      Object.assign(weights, { 'steady-pull': 15, 'power-dash': 48, 'deep-dive': 10, thrash: 17, recover: 10 });
+      weights['power-dash'] = 44;
+      weights['steady-pull'] = 18;
+      weights['deep-dive'] = 18;
+      weights.thrash = 12;
+      weights.recover = 8;
       break;
     case 'diver':
-      Object.assign(weights, { 'steady-pull': 15, 'power-dash': 12, 'deep-dive': 50, thrash: 13, recover: 10 });
+      weights['deep-dive'] = 44;
+      weights['steady-pull'] = 17;
+      weights['power-dash'] = 14;
+      weights.thrash = 15;
+      weights.recover = 10;
       break;
     case 'bruiser':
-      Object.assign(weights, { 'steady-pull': 24, 'power-dash': 12, 'deep-dive': 15, thrash: 41, recover: 8 });
+      weights.thrash = 42;
+      weights['power-dash'] = 18;
+      weights['steady-pull'] = 17;
+      weights['deep-dive'] = 13;
+      weights.recover = 10;
       break;
     case 'trickster':
-      Object.assign(weights, { 'steady-pull': 18, 'power-dash': 28, 'deep-dive': 24, thrash: 22, recover: 8 });
+      weights['deep-dive'] = 24;
+      weights['power-dash'] = 22;
+      weights.thrash = 22;
+      weights['steady-pull'] = 18;
+      weights.recover = 14;
       break;
     case 'endurance':
-      Object.assign(weights, { 'steady-pull': 29, 'power-dash': 10, 'deep-dive': 16, thrash: 15, recover: 30 });
+      weights['steady-pull'] = 30;
+      weights.recover = staminaRatio < 0.8 ? 30 : 18;
+      weights['deep-dive'] = 20;
+      weights.thrash = 12;
+      weights['power-dash'] = 10;
       break;
     case 'berserker':
-      if (staminaRatio <= 0.5) {
-        Object.assign(weights, { 'steady-pull': 8, 'power-dash': 38, 'deep-dive': 18, thrash: 31, recover: 5 });
+      if (phase === 3) {
+        weights['power-dash'] = 44;
+        weights.thrash = 31;
+        weights['deep-dive'] = 16;
+        weights['steady-pull'] = 7;
+        weights.recover = 2;
+      } else if (phase === 2) {
+        weights['power-dash'] = 32;
+        weights.thrash = 30;
+        weights['deep-dive'] = 24;
+        weights['steady-pull'] = 10;
+        weights.recover = 4;
       } else {
-        Object.assign(weights, { 'steady-pull': 20, 'power-dash': 26, 'deep-dive': 20, thrash: 24, recover: 10 });
+        weights['steady-pull'] = 28;
+        weights['deep-dive'] = 24;
+        weights['power-dash'] = 20;
+        weights.thrash = 18;
+        weights.recover = 10;
       }
       break;
   }
 
-  const entries = Object.entries(weights) as Array<[FishIntentType, number]>;
-  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-  let cursor = random.value * total;
-  let selected: FishIntentType = entries[0]?.[0] ?? 'steady-pull';
+  return weights;
+}
 
-  for (const [type, weight] of entries) {
-    cursor -= weight;
-    if (cursor <= 0) {
+function weightedIntent(
+  seed: number,
+  fish: TurnFishProfile,
+  staminaRatio: number,
+  phase: 1 | 2 | 3 | null,
+): { seed: number; intent: FishIntent } {
+  const weights = intentWeights(fish.archetype, staminaRatio, phase);
+  const roll = nextRandomFloat(seed);
+  const total = INTENT_ORDER.reduce((sum, type) => sum + weights[type], 0);
+  let threshold = roll.value * total;
+  let selected: FishIntentType = 'recover';
+
+  for (const type of INTENT_ORDER) {
+    threshold -= weights[type];
+    if (threshold < 0) {
       selected = type;
       break;
     }
   }
 
   return {
-    seed: random.seed,
+    seed: roll.seed,
     intent: {
       type: selected,
-      difficulty: intentDifficulty(selected, fish),
+      difficulty: intentDifficulty(selected, fish, phase),
     },
   };
 }
 
-function actionMode(
-  action: TurnFishingAction,
-  intent: FishIntentType,
-  insight: boolean,
-): CheckMode {
-  if (insight) return 'advantage';
+function nextIntent(
+  seed: number,
+  fish: TurnFishProfile,
+  stamina: number,
+): { seed: number; phase: 1 | 2 | 3 | null; intent: FishIntent } {
+  const phase = bossPhaseFor(fish, stamina);
+  const staminaRatio = clamp(stamina / Math.max(1, fish.stats.stamina), 0, 1);
+  const weighted = weightedIntent(seed, fish, staminaRatio, phase);
+  return { ...weighted, phase };
+}
 
-  if (action === 'brace' && ['power-dash', 'deep-dive', 'thrash'].includes(intent)) {
-    return 'advantage';
-  }
-  if (action === 'reel' && ['power-dash', 'deep-dive'].includes(intent)) {
-    return 'disadvantage';
-  }
-  if (action === 'pull' && ['power-dash', 'deep-dive', 'thrash'].includes(intent)) {
-    return 'disadvantage';
+function intentMode(action: TurnFishingAction, session: TurnFishingSession): {
+  mode: CheckMode;
+  reason: CheckModeReason;
+} {
+  if (session.insight) return { mode: 'advantage', reason: 'observed-insight' };
+
+  const intent = session.currentIntent.type;
+  const aggressive = intent === 'power-dash' || intent === 'deep-dive' || intent === 'thrash';
+
+  if (action === 'brace' && aggressive) return { mode: 'advantage', reason: 'brace-counter' };
+  if ((action === 'pull' || action === 'reel') && session.braced && aggressive) {
+    return { mode: 'advantage', reason: 'brace-counter' };
   }
   if ((action === 'pull' || action === 'reel') && intent === 'recover') {
-    return 'advantage';
+    return { mode: 'advantage', reason: 'recovery-window' };
+  }
+  if ((action === 'reel' && (intent === 'power-dash' || intent === 'deep-dive'))
+    || (action === 'pull' && aggressive)) {
+    return { mode: 'disadvantage', reason: 'poor-response' };
   }
 
-  return 'normal';
+  return { mode: 'normal', reason: 'neutral' };
 }
 
 function actionModifier(action: TurnFishingAction, stats: TurnGearStats): number {
-  const luck = Math.floor(gear(stats.luck) / 4);
+  let modifier = 0;
+
   switch (action) {
     case 'reel':
-      return Math.round((gear(stats.control) + gear(stats.reelSpeed)) / 2) + luck;
+      modifier = stats.control * 0.3 + stats.reelSpeed * 0.25;
+      break;
     case 'pull':
-      return Math.round((gear(stats.power) + gear(stats.control) * 0.4)) + luck;
+      modifier = stats.power * 0.4 + stats.control * 0.1;
+      break;
     case 'brace':
-      return Math.round((gear(stats.control) + gear(stats.lineStrength)) / 2) + luck;
+      modifier = stats.control * 0.35 + stats.lineStrength * 0.15;
+      break;
     case 'observe':
-      return gear(stats.instinct) + luck;
+      modifier = stats.instinct * 0.55 + stats.control * 0.1;
+      break;
     case 'release':
-      return gear(stats.control);
+      return 0;
   }
+
+  return Math.round(modifier + Math.floor(stats.luck / 4));
 }
 
-function actionDifficulty(action: TurnFishingAction, intent: FishIntent, fish: TurnFishProfile): number {
-  if (action === 'observe') {
-    return 9 + Math.round(rating(fish.stats.technique) / 18);
+function actionDifficulty(action: TurnFishingAction, session: TurnFishingSession): number {
+  if (action === 'observe') return Math.max(7, session.currentIntent.difficulty - 1);
+  if (action === 'brace') return Math.max(7, session.currentIntent.difficulty - 2);
+  return session.currentIntent.difficulty;
+}
+
+export function previewTurnFishingAction(
+  session: TurnFishingSession,
+  action: TurnFishingAction,
+  _fish: TurnFishProfile,
+  stats: TurnGearStats,
+): TurnActionPreview {
+  if (action === 'release') {
+    return { mode: null, modeReason: null, modifier: 0, difficulty: null };
   }
-  if (action === 'brace') {
-    return Math.max(8, intent.difficulty - 1);
-  }
-  return intent.difficulty;
+
+  const intent = intentMode(action, session);
+  return {
+    mode: intent.mode,
+    modeReason: intent.reason,
+    modifier: actionModifier(action, stats),
+    difficulty: actionDifficulty(action, session),
+  };
+}
+
+function markEvent(session: TurnFishingSession, event: TurnCombatEvent): TurnFishingSession {
+  return {
+    ...session,
+    lastEvent: event,
+    eventSequence: session.eventSequence + 1,
+  };
+}
+
+function finishCaught(session: TurnFishingSession, fish: TurnFishProfile): TurnFishingSession {
+  const roll = nextRandomFloat(session.seed);
+  const low = Math.max(1, Math.min(fish.sizeRangeCm.min, fish.sizeRangeCm.max));
+  const high = Math.max(low, Math.max(fish.sizeRangeCm.min, fish.sizeRangeCm.max));
+  const lengthCm = Math.round(low + roll.value * (high - low));
+  const result: TurnCatchResult = {
+    fishId: fish.id,
+    lengthCm,
+    weightKg: Math.round((lengthCm ** 3 / 100_000) * 100) / 100,
+  };
+
+  return markEvent({
+    ...session,
+    seed: roll.seed,
+    phase: 'caught',
+    result,
+  }, 'caught');
+}
+
+function finishFailure(
+  session: TurnFishingSession,
+  phase: 'escaped' | 'line-break',
+): TurnFishingSession {
+  return markEvent({ ...session, phase }, phase);
 }
 
 function applyCheckAction(
@@ -176,77 +320,72 @@ function applyCheckAction(
   action: Exclude<TurnFishingAction, 'release'>,
   fish: TurnFishProfile,
   stats: TurnGearStats,
-): { session: TurnFishingSession; knowledgeDiscovered: boolean } {
-  const mode = actionMode(action, session.currentIntent.type, session.insight);
-  const checked = resolveSkillCheck(
+): { seed: number; session: TurnFishingSession; observationSucceeded: boolean } {
+  const preview = previewTurnFishingAction(session, action, fish, stats);
+  const check = resolveSkillCheck(
     session.seed,
-    mode,
-    actionModifier(action, stats),
-    actionDifficulty(action, session.currentIntent, fish),
+    preview.mode ?? 'normal',
+    preview.modifier,
+    preview.difficulty ?? session.currentIntent.difficulty,
+    preview.modeReason ?? 'neutral',
   );
-  const scale = outcomeScale(checked.result.outcome);
-
+  const scale = outcomeScale(check.result.outcome);
   let stamina = session.stamina;
   let distance = session.distance;
   let tension = session.tension;
   let braced = session.braced;
   let insight = false;
-  let knowledgeDiscovered = false;
+  let observationSucceeded = false;
 
-  if (action === 'reel') {
-    if (checked.result.outcome === 'critical-failure') {
-      distance += 5;
-      tension += 12;
-    } else {
-      distance -= (7 + gear(stats.reelSpeed) * 0.7) * scale;
-      stamina -= (1.5 + Math.max(0, gear(stats.power)) * 0.25) * scale;
-      tension += Math.max(2, 8 - gear(stats.control) * 0.35) * (1.15 - scale * 0.15);
-    }
+  switch (action) {
+    case 'reel':
+      if (scale === 0) {
+        distance += 2;
+        tension += 12;
+      } else {
+        distance -= (8.5 + stats.reelSpeed * 0.8) * scale;
+        stamina -= (1.5 + Math.max(0, stats.power) * 0.15) * scale;
+        tension += Math.max(1, 6 - stats.control * 0.35) * (1.15 - scale * 0.15);
+      }
+      break;
+    case 'pull':
+      if (scale === 0) {
+        distance += 3;
+        tension += 13;
+      } else {
+        stamina -= (9 + Math.max(0, stats.power) * 0.75) * scale;
+        distance -= (7.5 + Math.max(0, stats.power) * 0.35) * scale;
+        tension += Math.max(3, 9 - stats.control * 0.35 - stats.lineStrength * 0.2)
+          * (1.15 - scale * 0.18);
+      }
+      break;
+    case 'brace':
+      braced = scale > 0;
+      if (check.result.outcome === 'critical-success') tension -= 8;
+      else if (scale > 0) tension -= 4;
+      if (scale === 0) tension += 9;
+      break;
+    case 'observe':
+      observationSucceeded = check.result.outcome !== 'critical-failure' && check.result.outcome !== 'failure';
+      insight = observationSucceeded;
+      if (check.result.outcome === 'critical-success') tension -= 4;
+      break;
   }
 
-  if (action === 'pull') {
-    if (checked.result.outcome === 'critical-failure') {
-      distance += 3;
-      tension += 18;
-    } else {
-      stamina -= (8 + Math.max(0, gear(stats.power)) * 0.9) * scale;
-      distance -= (4 + Math.max(0, gear(stats.power)) * 0.25) * scale;
-      tension += Math.max(5, 14 - gear(stats.control) * 0.35) * (1.2 - scale * 0.2);
-    }
-  }
+  const next = markEvent({
+    ...session,
+    seed: check.seed,
+    stamina: clamp(stamina, 0, session.maxStamina),
+    distance: clamp(distance, 0, MAX_DISTANCE),
+    tension: clamp(tension, 0, 120),
+    braced,
+    insight,
+    lastAction: action,
+    lastIntent: session.currentIntent.type,
+    lastCheck: check.result,
+  }, `action-${action}`);
 
-  if (action === 'brace') {
-    braced = checked.result.outcome !== 'critical-failure' && checked.result.outcome !== 'failure';
-    if (checked.result.outcome === 'critical-success') tension -= 6;
-    else if (checked.result.outcome === 'critical-failure') tension += 8;
-  }
-
-  if (action === 'observe') {
-    knowledgeDiscovered = checked.result.outcome !== 'critical-failure' && checked.result.outcome !== 'failure';
-    insight = knowledgeDiscovered;
-    if (checked.result.outcome === 'critical-success') tension -= 4;
-  }
-
-  return {
-    knowledgeDiscovered,
-    session: {
-      ...session,
-      seed: checked.seed,
-      stamina: clamp(stamina, 0, session.maxStamina),
-      distance: clamp(distance, 0, session.maxDistance),
-      tension: clamp(tension, 0, 100),
-      braced,
-      insight,
-      lastCheck: checked.result,
-      lastEvent: action === 'reel'
-        ? 'action-reel'
-        : action === 'pull'
-          ? 'action-pull'
-          : action === 'brace'
-            ? 'action-brace'
-            : 'action-observe',
-    },
-  };
+  return { seed: check.seed, session: next, observationSucceeded };
 }
 
 function resolveFishAction(
@@ -255,106 +394,88 @@ function resolveFishAction(
   stats: TurnGearStats,
 ): TurnFishingSession {
   const intent = session.currentIntent.type;
-  const fishPower = rating(fish.stats.power);
-  const fishSpeed = rating(fish.stats.speed);
-  let distance = session.distance;
-  let tension = session.tension;
-  let stamina = session.stamina;
-  let lineDurability = session.lineDurability;
-
   let distancePressure = 0;
   let tensionPressure = 0;
-  let lineDamage = 0;
+  let staminaRecovery = 0;
 
   switch (intent) {
     case 'steady-pull':
-      distancePressure = 5 + fishSpeed * 0.025;
-      tensionPressure = 6 + fishPower * 0.035;
+      distancePressure = 3 + fish.stats.speed * 0.035;
+      tensionPressure = 2 + fish.stats.resistance * 0.02;
       break;
     case 'power-dash':
-      distancePressure = 12 + fishSpeed * 0.055;
-      tensionPressure = 10 + fishPower * 0.045;
+      distancePressure = 7 + fish.stats.speed * 0.06 + fish.stats.power * 0.025;
+      tensionPressure = 8 + fish.stats.power * 0.05;
       break;
     case 'deep-dive':
-      distancePressure = 8 + fishSpeed * 0.03;
-      tensionPressure = 15 + fishPower * 0.055;
+      distancePressure = 6 + fish.stats.speed * 0.05;
+      tensionPressure = 11 + fish.stats.resistance * 0.035;
       break;
     case 'thrash':
-      distancePressure = 3 + fishSpeed * 0.02;
-      tensionPressure = 18 + fishPower * 0.06;
-      lineDamage = 4 + fishPower * 0.045;
+      distancePressure = 2 + fish.stats.speed * 0.02;
+      tensionPressure = 13 + fish.stats.power * 0.05;
       break;
     case 'recover':
-      stamina += 6 + rating(fish.stats.resistance) * 0.05;
-      tension -= 3;
+      tensionPressure = -12;
+      staminaRecovery = 5 + fish.stats.resistance * 0.04;
       break;
   }
 
-  if (session.braced && ['power-dash', 'deep-dive', 'thrash'].includes(intent)) {
-    distancePressure *= 0.45;
-    tensionPressure *= 0.5;
-    lineDamage *= 0.35;
-  }
-
-  if (session.releasedThisTurn && ['deep-dive', 'thrash'].includes(intent)) {
-    tensionPressure *= 0.35;
+  if (session.bossPhase === 2) {
     distancePressure *= 1.2;
+    tensionPressure *= 1.12;
+  } else if (session.bossPhase === 3) {
+    distancePressure *= 1.8;
+    tensionPressure *= 1.15;
   }
 
-  distance += distancePressure;
-  tension += tensionPressure;
-
-  if (tension < 10 && intent !== 'recover') {
-    distance += 5;
+  let lineDamageMultiplier = 1;
+  if (session.braced && (intent === 'power-dash' || intent === 'deep-dive' || intent === 'thrash')) {
+    distancePressure *= 0.25;
+    tensionPressure *= 0.42;
+    lineDamageMultiplier *= 0.4;
+  }
+  if (session.releasedThisTurn && (intent === 'deep-dive' || intent === 'thrash')) {
+    tensionPressure *= 0.38;
+    lineDamageMultiplier *= 0.5;
   }
 
-  const dangerThreshold = clamp(78 + gear(stats.lineStrength) * 0.8, 68, 94);
-  if (tension > dangerThreshold) {
-    lineDamage += (tension - dangerThreshold) * 0.8;
-  }
+  const tension = clamp(session.tension + tensionPressure, 0, 120);
+  const distance = clamp(session.distance + distancePressure, 0, MAX_DISTANCE);
+  const stamina = clamp(session.stamina + staminaRecovery, 0, session.maxStamina);
+  const dangerLine = 78 + stats.lineStrength * 0.8;
 
-  lineDurability -= lineDamage;
+  let lineDamage = 0;
+  if (tension >= dangerLine) lineDamage += 2 + (tension - dangerLine) * 0.2;
+  if (intent === 'thrash' && tension >= 45) lineDamage += 2 + fish.stats.power * 0.04;
+  lineDamage *= lineDamageMultiplier;
+  const lineDurability = clamp(session.lineDurability - lineDamage, 0, session.maxLineDurability);
 
-  const next: TurnFishingSession = {
+  let next: TurnFishingSession = {
     ...session,
-    stamina: clamp(stamina, 0, session.maxStamina),
-    distance: clamp(distance, 0, session.maxDistance),
-    tension: clamp(tension, 0, 100),
-    lineDurability: clamp(lineDurability, 0, session.maxLineDurability),
-    lastEvent: lineDamage > 0 ? 'line-damaged' : 'fish-action',
-  };
-
-  if (next.lineDurability <= 0 || next.tension >= 100) {
-    return { ...next, phase: 'line-break', lastEvent: 'line-break' };
-  }
-  if (next.distance >= next.maxDistance) {
-    return { ...next, phase: 'escaped', lastEvent: 'escaped' };
-  }
-  if (next.stamina <= 0 && next.distance <= 15) {
-    return { ...next, phase: 'caught', lastEvent: 'caught' };
-  }
-
-  return next;
-}
-
-function beginNextTurn(session: TurnFishingSession, fish: TurnFishProfile): TurnFishingSession {
-  const nextIntent = weightedIntent(
-    session.seed,
-    fish,
-    session.maxStamina > 0 ? session.stamina / session.maxStamina : 0,
-  );
-
-  return {
-    ...session,
-    seed: nextIntent.seed,
-    turn: session.turn + 1,
-    ap: session.maxAp,
-    currentIntent: nextIntent.intent,
+    stamina,
+    distance,
+    tension,
+    lineDurability,
     braced: false,
     releasedThisTurn: false,
-    insight: false,
-    lastEvent: 'fish-intent',
   };
+
+  if (tension >= 100 || lineDurability <= 0) return finishFailure(next, 'line-break');
+  if (distance >= MAX_DISTANCE) return finishFailure(next, 'escaped');
+  if (stamina <= 0 && distance <= (fish.catchDistance ?? CATCH_DISTANCE)) return finishCaught(next, fish);
+
+  const intentRoll = nextIntent(next.seed, fish, next.stamina);
+  next = {
+    ...next,
+    seed: intentRoll.seed,
+    turn: next.turn + 1,
+    ap: next.maxAp,
+    currentIntent: intentRoll.intent,
+    bossPhase: intentRoll.phase,
+    releasedThisTurn: false,
+  };
+  return markEvent(next, lineDamage > 0 ? 'line-damaged' : 'fish-action');
 }
 
 function settleAfterPlayerAction(
@@ -362,20 +483,13 @@ function settleAfterPlayerAction(
   fish: TurnFishProfile,
   stats: TurnGearStats,
 ): TurnFishingSession {
-  if (session.stamina <= 0 && session.distance <= 15) {
-    return { ...session, phase: 'caught', lastEvent: 'caught' };
+  if (session.stamina <= 0 && session.distance <= (fish.catchDistance ?? CATCH_DISTANCE)) {
+    return finishCaught(session, fish);
   }
-  if (session.tension >= 100 || session.lineDurability <= 0) {
-    return { ...session, phase: 'line-break', lastEvent: 'line-break' };
-  }
-  if (session.distance >= session.maxDistance) {
-    return { ...session, phase: 'escaped', lastEvent: 'escaped' };
-  }
+  if (session.tension >= 100 || session.lineDurability <= 0) return finishFailure(session, 'line-break');
+  if (session.distance >= MAX_DISTANCE) return finishFailure(session, 'escaped');
   if (session.ap > 0) return session;
-
-  const afterFish = resolveFishAction(session, fish, stats);
-  if (afterFish.phase !== 'player-turn') return afterFish;
-  return beginNextTurn(afterFish, fish);
+  return resolveFishAction(session, fish, stats);
 }
 
 export function createTurnFishingSession(
@@ -383,35 +497,37 @@ export function createTurnFishingSession(
   fish: TurnFishProfile,
   stats: TurnGearStats,
 ): TurnFishingSession {
-  const safeSeed = Number.isFinite(seed) ? Math.trunc(seed) >>> 0 : 0;
-  const maxStamina = Math.max(1, rating(fish.stats.stamina));
-  const maxLineDurability = clamp(
-    DEFAULT_LINE_DURABILITY + gear(stats.lineStrength) * 2,
-    60,
-    150,
-  );
-  const firstIntent = weightedIntent(safeSeed, fish, 1);
+  const safeSeed = Math.trunc(Number.isFinite(seed) ? seed : 1) >>> 0;
+  const maxStamina = clamp(fish.stats.stamina, 1, 500);
+  const maxLineDurability = clamp(100 + stats.lineStrength * 2.3, 60, 150);
+  const initialPhase = bossPhaseFor(fish, maxStamina);
+  const roll = weightedIntent(safeSeed, fish, 1, initialPhase);
 
   return {
     phase: 'player-turn',
-    seed: firstIntent.seed,
+    seed: roll.seed,
     fishId: fish.id,
     turn: 1,
-    ap: DEFAULT_AP,
-    maxAp: DEFAULT_AP,
+    ap: AP_PER_TURN,
+    maxAp: AP_PER_TURN,
     stamina: maxStamina,
     maxStamina,
-    tension: DEFAULT_TENSION,
-    distance: DEFAULT_DISTANCE,
-    maxDistance: DEFAULT_MAX_DISTANCE,
+    tension: START_TENSION,
+    distance: START_DISTANCE,
+    maxDistance: MAX_DISTANCE,
     lineDurability: maxLineDurability,
     maxLineDurability,
-    currentIntent: firstIntent.intent,
+    currentIntent: roll.intent,
+    bossPhase: initialPhase,
     braced: false,
     releasedThisTurn: false,
     insight: false,
+    lastAction: null,
+    lastIntent: null,
     lastCheck: null,
     lastEvent: 'fish-intent',
+    eventSequence: 1,
+    result: null,
   };
 }
 
@@ -422,39 +538,35 @@ export function applyTurnFishingAction(
   stats: TurnGearStats,
 ): TurnActionResolution {
   if (session.phase !== 'player-turn' || session.ap <= 0 || session.fishId !== fish.id) {
-    return { session, knowledgeDiscovered: false };
+    return { session, observationSucceeded: false };
   }
 
-  let next = session;
-  let knowledgeDiscovered = false;
+  let next: TurnFishingSession;
+  let observationSucceeded = false;
 
   if (action === 'release') {
-    next = {
+    next = markEvent({
       ...session,
-      tension: clamp(session.tension - (18 + gear(stats.control) * 0.7), 0, 100),
-      distance: clamp(session.distance + 5 + rating(fish.stats.speed) * 0.025, 0, session.maxDistance),
+      ap: session.ap - 1,
+      tension: clamp(session.tension - (18 + stats.control * 0.7), 0, 120),
+      distance: clamp(session.distance + 5 + fish.stats.speed * 0.025, 0, MAX_DISTANCE),
       releasedThisTurn: true,
+      lastAction: action,
+      lastIntent: session.currentIntent.type,
       insight: false,
-      lastCheck: null,
-      lastEvent: 'action-release',
-    };
+    }, 'action-release');
   } else {
-    const resolved = applyCheckAction(session, action, fish, stats);
-    next = resolved.session;
-    knowledgeDiscovered = resolved.knowledgeDiscovered;
+    const result = applyCheckAction(session, action, fish, stats);
+    next = { ...result.session, ap: session.ap - 1 };
+    observationSucceeded = result.observationSucceeded;
   }
 
-  next = {
-    ...next,
-    ap: Math.max(0, session.ap - 1),
-  };
-
   return {
-    knowledgeDiscovered,
     session: settleAfterPlayerAction(next, fish, stats),
+    observationSucceeded,
   };
 }
 
-export function isTurnCombatTerminal(session: TurnFishingSession): boolean {
-  return session.phase === 'caught' || session.phase === 'escaped' || session.phase === 'line-break';
+export function isTurnCombatTerminal(phase: TurnFishingSession['phase']): boolean {
+  return phase === 'caught' || phase === 'escaped' || phase === 'line-break';
 }

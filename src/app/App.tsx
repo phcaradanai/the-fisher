@@ -19,30 +19,29 @@ export function App() {
   const soundEnabled = useGameStore((state) => state.soundEnabled);
   const reducedMotion = useGameStore((state) => state.reducedMotion);
   const notice = useGameStore((state) => state.notice);
-  const sessionEvent = useGameStore((state) => state.session.event);
+  const sessionEvent = useGameStore((state) => state.session?.lastEvent ?? null);
+  const sessionEventSequence = useGameStore((state) => state.session?.eventSequence ?? 0);
   const setTab = useGameStore((state) => state.setTab);
   const setLocale = useGameStore((state) => state.setLocale);
   const setSoundEnabled = useGameStore((state) => state.setSoundEnabled);
   const setReducedMotion = useGameStore((state) => state.setReducedMotion);
   const dismissNotice = useGameStore((state) => state.dismissNotice);
-  const previousEvent = useRef<typeof sessionEvent>(null);
+  const previousEventSequence = useRef(0);
   const copy = UI_COPY[locale];
   const resourceFormatter = new Intl.NumberFormat(locale === 'th' ? 'th-TH' : 'en-US');
   const ActivePanel = PANEL_BY_TAB[activeTab];
-
-  useEffect(() => {
-    const timer = window.setInterval(() => useGameStore.getState().advance(50), 50);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
   useEffect(() => {
-    if (sessionEvent && sessionEvent !== previousEvent.current) playFishingCue(sessionEvent, soundEnabled);
-    previousEvent.current = sessionEvent;
-  }, [sessionEvent, soundEnabled]);
+    if (sessionEvent && sessionEventSequence !== previousEventSequence.current) {
+      playFishingCue(sessionEvent, soundEnabled);
+    }
+    previousEventSequence.current = sessionEventSequence;
+  }, [sessionEvent, sessionEventSequence, soundEnabled]);
+
 
   return (
     <div className="game-shell" data-reduced-motion={reducedMotion}>
