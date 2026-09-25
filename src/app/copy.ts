@@ -44,6 +44,11 @@ type UiCopy = {
   brace: string;
   observe: string;
   actionHint: Record<TurnFishingAction, string>;
+  firstEncounter: {
+    castHint: string;
+    turnHint: string;
+    role: Record<TurnFishingAction, string>;
+  };
   phase: Record<TurnCombatPhase, string>;
   bossPhase: Record<1 | 2 | 3, string>;
   intentName: Record<FishIntentType, string>;
@@ -63,18 +68,38 @@ type UiCopy = {
   lineBroken: string;
   tryAgain: string;
   caught: string;
+  discovery: string;
+  firstCatch: string;
+  record: string;
+  reward: string;
+  earnedReputation: string;
+  sellReward: string;
+  knowledgeProgress: string;
+  collectionProgress: string;
   weight: string;
   length: string;
   sell: string;
   keep: string;
   setup: string;
   setupHint: string;
+  buildProfile: string;
+  powerBuild: string;
+  controlBuild: string;
+  buildStrength: string;
+  buildTradeoff: string;
+  noPenalty: string;
+  compare: string;
+  equippedNow: string;
+  availableAlternatives: string;
   baitTargets: string;
+  baitUnknownCount: (count: number) => string;
   unknownBaitTargets: string;
   collectionTitle: string;
   collectionDescription: string;
   discovered: string;
   undiscovered: string;
+  unknownSpecimen: (number: number) => string;
+  featureFish: string;
   catches: string;
   bestCatch: string;
   knowledge: string;
@@ -154,6 +179,17 @@ export const UI_COPY: Record<Locale, UiCopy> = {
       brace: 'Counter a surge and soften its response.',
       observe: 'Read intent; success records a note and sharpens your next move.',
     },
+    firstEncounter: {
+      castHint: 'CAST starts the first encounter. Read the fish, then choose how to answer it.',
+      turnHint: '2 AP per round. The fish responds when AP is exhausted. Advantage aids a match; disadvantage warns of conflict.',
+      role: {
+        reel: 'Closes distance; tension rises.',
+        pull: 'Drains stamina; tension rises.',
+        release: 'Lowers tension; loses distance.',
+        brace: 'Absorbs a rush.',
+        observe: 'Reads intent.',
+      },
+    },
     phase: {
       ready: 'Ready at the water',
       'player-turn': 'Your turn',
@@ -209,18 +245,38 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     lineBroken: 'The line snapped under pressure.',
     tryAgain: 'Prepare another cast',
     caught: 'Landed',
+    discovery: 'Field discovery',
+    firstCatch: 'First catch',
+    record: 'Personal best',
+    reward: 'Reward',
+    earnedReputation: 'Trust earned',
+    sellReward: 'Sell reward',
+    knowledgeProgress: 'Knowledge',
+    collectionProgress: 'Fish book',
     weight: 'Weight',
     length: 'Length',
     sell: 'Sell for',
     keep: 'Keep fish',
     setup: 'Your setup',
     setupHint: 'Control steadies the line; power drains stamina faster.',
+    buildProfile: 'Build profile',
+    powerBuild: 'Power-led',
+    controlBuild: 'Control-led',
+    buildStrength: 'Strength',
+    buildTradeoff: 'Trade-off',
+    noPenalty: 'No built-in penalty',
+    compare: 'vs current',
+    equippedNow: 'Equipped now',
+    availableAlternatives: 'Available alternatives',
     baitTargets: 'This bait draws',
+    baitUnknownCount: (count) => `${count} unknown target${count === 1 ? '' : 's'}`,
     unknownBaitTargets: 'No preferred catch is recorded for this bait.',
     collectionTitle: 'Fish book',
     collectionDescription: 'Observe fish in a duel to reveal habitat, bait, and counterplay.',
     discovered: 'Recorded',
     undiscovered: 'Not yet seen',
+    unknownSpecimen: (number) => `Unknown specimen ${String(number).padStart(2, '0')}`,
+    featureFish: 'Spotlight this fish',
     catches: 'Catches',
     bestCatch: 'Best catch',
     knowledge: 'Field notes',
@@ -322,6 +378,17 @@ export const UI_COPY: Record<Locale, UiCopy> = {
       brace: 'รับท่าพุ่งและลดแรงโต้กลับของปลา',
       observe: 'อ่านท่าที หากสำเร็จจะบันทึกความรู้และช่วยแอ็กชันถัดไป',
     },
+    firstEncounter: {
+      castHint: 'เหวี่ยงเบ็ดเพื่อเริ่มดวลครั้งแรก อ่านท่าทีปลา แล้วเลือกวิธีตอบโต้',
+      turnHint: 'รอบละ 2 แต้ม ปลาโต้ตอบเมื่อแต้มหมด ได้เปรียบคือจังหวะเข้าคู่ ส่วนเสียเปรียบเตือนว่าแอ็กชันสวนทาง',
+      role: {
+        reel: 'ลดระยะ แต่ตึงสายเพิ่ม',
+        pull: 'ลดแรงปลา แต่ตึงสายเพิ่ม',
+        release: 'ลดแรงตึง แต่เสียระยะ',
+        brace: 'รับแรงพุ่ง',
+        observe: 'อ่านท่าที',
+      },
+    },
     phase: {
       ready: 'พร้อมริมคลอง',
       'player-turn': 'ตาคุณแล้ว',
@@ -377,18 +444,38 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     lineBroken: 'สายขาดเพราะรับแรงไม่ไหว',
     tryAgain: 'เตรียมเหวี่ยงอีกครั้ง',
     caught: 'จับได้แล้ว',
+    discovery: 'ค้นพบในสมุดปลา',
+    firstCatch: 'จับได้เป็นครั้งแรก',
+    record: 'สถิติส่วนตัว',
+    reward: 'รางวัล',
+    earnedReputation: 'ชื่อเสียงที่ได้รับ',
+    sellReward: 'รางวัลจากการขาย',
+    knowledgeProgress: 'ความรู้',
+    collectionProgress: 'สมุดปลา',
     weight: 'น้ำหนัก',
     length: 'ความยาว',
     sell: 'ขายได้',
     keep: 'เก็บปลาไว้',
     setup: 'ชุดอุปกรณ์ของคุณ',
     setupHint: 'การควบคุมช่วยประคองสาย พลังช่วยลดแรงปลาได้เร็วขึ้น',
+    buildProfile: 'แนวทางของชุด',
+    powerBuild: 'เน้นพลัง',
+    controlBuild: 'เน้นการควบคุม',
+    buildStrength: 'จุดแข็ง',
+    buildTradeoff: 'สิ่งที่ต้องแลก',
+    noPenalty: 'ไม่มีข้อเสียจากชุดนี้',
+    compare: 'เทียบกับชุดปัจจุบัน',
+    equippedNow: 'ใช้อยู่ตอนนี้',
+    availableAlternatives: 'ตัวเลือกอื่น',
     baitTargets: 'เหยื่อนี้ดึงดูด',
+    baitUnknownCount: (count) => `เป้าหมายที่ยังไม่รู้จัก ${count} ชนิด`,
     unknownBaitTargets: 'ยังไม่มีข้อมูลปลาเป้าหมายของเหยื่อนี้',
     collectionTitle: 'สมุดปลา',
     collectionDescription: 'สังเกตปลาในระหว่างดวลเพื่อเปิดเผยถิ่นอาศัย เหยื่อ และวิธีรับมือ',
     discovered: 'บันทึกแล้ว',
     undiscovered: 'ยังไม่เคยพบ',
+    unknownSpecimen: (number) => `ตัวอย่างที่ยังไม่รู้จัก ${String(number).padStart(2, '0')}`,
+    featureFish: 'เปิดดูปลานี้',
     catches: 'จำนวนที่จับได้',
     bestCatch: 'ตัวใหญ่ที่สุด',
     knowledge: 'บันทึกภาคสนาม',

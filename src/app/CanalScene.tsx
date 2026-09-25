@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Rarity } from '../content/types';
-import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
+import type { CheckOutcome, TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
 
 type CanalSceneProps = {
   artwork: string | null;
@@ -15,13 +15,23 @@ type CanalSceneProps = {
   fishRarity: Rarity | null;
   phase: TurnCombatPhase;
   bossPhase: 1 | 2 | 3 | null;
+  lastCheckOutcome: CheckOutcome | null;
   reducedMotion: boolean;
   spotName: string;
   tension: number;
 };
 
 const SCENE_WIDTH = 1200;
-const SCENE_HEIGHT = 900;
+const SCENE_HEIGHT = 800;
+const WATERLINE_Y = 360;
+const VILLAGE_CANAL_BACKGROUND = '/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png';
+
+function coverSprite(sprite: Sprite, texture: Texture): number {
+  const scale = Math.max(SCENE_WIDTH / texture.width, SCENE_HEIGHT / texture.height);
+  sprite.scale.set(scale);
+  sprite.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
+  return scale;
+}
 
 export function CanalScene({
   artwork,
@@ -35,12 +45,15 @@ export function CanalScene({
   fishRarity,
   phase,
   bossPhase,
+  lastCheckOutcome,
   reducedMotion,
   spotName,
   tension,
 }: CanalSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const backgroundSpriteRef = useRef<Sprite | null>(null);
   const artworkSpriteRef = useRef<Sprite | null>(null);
+  const backgroundRequestRef = useRef(0);
   const artworkRequestRef = useRef(0);
   const artworkScaleRef = useRef(1);
   const sceneState = useRef({
@@ -53,10 +66,31 @@ export function CanalScene({
     fishRarity,
     phase,
     bossPhase,
+    lastCheckOutcome,
     reducedMotion,
     tension,
   });
   const [sceneError, setSceneError] = useState(false);
+
+  const loadBackground = useCallback(() => {
+    const sprite = backgroundSpriteRef.current;
+    if (!sprite) return;
+
+    const request = ++backgroundRequestRef.current;
+    sprite.visible = false;
+    sprite.texture = Texture.EMPTY;
+
+    void Assets.load<Texture>(VILLAGE_CANAL_BACKGROUND).then((texture) => {
+      if (request !== backgroundRequestRef.current || backgroundSpriteRef.current !== sprite) return;
+      sprite.texture = texture;
+      coverSprite(sprite, texture);
+      sprite.visible = true;
+    }).catch(() => {
+      if (request === backgroundRequestRef.current && backgroundSpriteRef.current === sprite) {
+        sprite.texture = Texture.EMPTY;
+      }
+    });
+  }, []);
 
   const loadArtwork = useCallback((path: string | null) => {
     const sprite = artworkSpriteRef.current;
@@ -70,10 +104,7 @@ export function CanalScene({
     void Assets.load<Texture>(path).then((texture) => {
       if (request !== artworkRequestRef.current || artworkSpriteRef.current !== sprite) return;
       sprite.texture = texture;
-      const scale = Math.min(SCENE_WIDTH / texture.width, SCENE_HEIGHT / texture.height);
-      artworkScaleRef.current = scale;
-      sprite.scale.set(scale);
-      sprite.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
+      artworkScaleRef.current = coverSprite(sprite, texture);
     }).catch(() => {
       if (request === artworkRequestRef.current && artworkSpriteRef.current === sprite) {
         sprite.texture = Texture.EMPTY;
@@ -92,10 +123,11 @@ export function CanalScene({
       fishRarity,
       phase,
       bossPhase,
+      lastCheckOutcome,
       reducedMotion,
       tension,
     };
-  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion, tension]);
+  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, lastCheckOutcome, reducedMotion, tension]);
 
   useEffect(() => {
     loadArtwork(artwork);
@@ -109,6 +141,10 @@ export function CanalScene({
     let disposed = false;
     let initialized = false;
     let elapsed = 0;
+    let feedbackPulse = 0;
+    let actionPulse = 0;
+    let actionKind: TurnFishingAction | null = null;
+    let lastEventSequence = sceneState.current.eventSequence;
     let resizeObserver: ResizeObserver | undefined;
 
     const start = async () => {
@@ -116,7 +152,7 @@ export function CanalScene({
         await app.init({
           antialias: true,
           autoDensity: true,
-          backgroundColor: 0x123f43,
+          backgroundColor: 0x082f37,
           preference: 'webgl',
           resolution: Math.min(window.devicePixelRatio || 1, 2),
           resizeTo: host,
@@ -134,79 +170,231 @@ export function CanalScene({
         app.canvas.className = 'canal-scene__canvas';
 
         const world = new Container();
-        const sky = new Graphics().rect(0, 0, SCENE_WIDTH, 275).fill({ color: 0xd5c18d });
-        const farBank = new Graphics()
-          .rect(0, 240, SCENE_WIDTH, 62).fill({ color: 0x586b43 })
-          .rect(0, 290, SCENE_WIDTH, 18).fill({ color: 0xb18a50 });
-        const water = new Graphics()
-          .rect(0, 302, SCENE_WIDTH, SCENE_HEIGHT - 302).fill({ color: 0x15565a })
-          .rect(0, 302, SCENE_WIDTH, 7).fill({ color: 0x82a786, alpha: 0.76 })
-          .rect(0, SCENE_HEIGHT - 140, SCENE_WIDTH, 140).fill({ color: 0x103b43, alpha: 0.44 })
-          .rect(0, SCENE_HEIGHT - 75, SCENE_WIDTH, 75).fill({ color: 0x092f37, alpha: 0.42 });
+        const fallbackWorld = new Container();
+        const fallbackSky = new Graphics()
+          .rect(0, 0, SCENE_WIDTH, 252)
+          .fill({ color: 0x182e3c });
+        const fallbackBank = new Graphics()
+          .rect(0, 236, SCENE_WIDTH, 54)
+          .fill({ color: 0x455d4d })
+          .rect(0, 281, SCENE_WIDTH, 18)
+          .fill({ color: 0xb18a50 });
+        const fallbackWater = new Graphics()
+          .rect(0, 290, SCENE_WIDTH, SCENE_HEIGHT - 290)
+          .fill({ color: 0x15565a })
+          .rect(0, 290, SCENE_WIDTH, 7)
+          .fill({ color: 0x9ab99a, alpha: 0.68 })
+          .rect(0, SCENE_HEIGHT - 150, SCENE_WIDTH, 150)
+          .fill({ color: 0x0b343d, alpha: 0.46 });
         const distantHouses = new Graphics()
-          .rect(105, 158, 116, 82).fill({ color: 0x9b7951 })
-          .moveTo(92, 160).lineTo(163, 104).lineTo(235, 160).fill({ color: 0x674f3d })
-          .rect(146, 190, 29, 50).fill({ color: 0x3d5149 })
-          .rect(724, 178, 138, 62).fill({ color: 0xc3a766 })
-          .moveTo(708, 180).lineTo(790, 126).lineTo(877, 180).fill({ color: 0x735643 })
-          .rect(765, 199, 32, 41).fill({ color: 0x435851 });
-        const reedLines = new Graphics();
-        for (let index = 0; index < 13; index += 1) {
-          const x = 35 + index * 38;
+          .rect(96, 151, 134, 86)
+          .fill({ color: 0x80674e })
+          .moveTo(82, 153)
+          .lineTo(164, 94)
+          .lineTo(247, 153)
+          .closePath()
+          .fill({ color: 0x493d3f })
+          .rect(145, 190, 31, 47)
+          .fill({ color: 0x384e4e })
+          .rect(720, 173, 148, 64)
+          .fill({ color: 0x9e8655 })
+          .moveTo(702, 175)
+          .lineTo(790, 119)
+          .lineTo(887, 175)
+          .closePath()
+          .fill({ color: 0x554147 })
+          .rect(764, 198, 33, 39)
+          .fill({ color: 0x354c4b });
+        const fallbackReeds = new Graphics();
+        for (let index = 0; index < 14; index += 1) {
+          const x = 28 + index * 38;
           const height = 25 + (index % 4) * 13;
-          reedLines.moveTo(x, 300).lineTo(x + 5, 300 - height).stroke({ color: index % 2 ? 0x53693e : 0x77824c, width: 4 });
-          reedLines.moveTo(x + 4, 300 - height + 8).lineTo(x + 16, 300 - height - 5).stroke({ color: 0x77824c, width: 2 });
+          fallbackReeds
+            .moveTo(x, 300)
+            .lineTo(x + 6, 300 - height)
+            .stroke({ color: index % 2 ? 0x526d50 : 0x7b8351, width: 4 });
+          fallbackReeds
+            .moveTo(x + 5, 300 - height + 8)
+            .lineTo(x + 18, 300 - height - 5)
+            .stroke({ color: 0x7b8351, width: 2 });
         }
         for (let index = 0; index < 12; index += 1) {
-          const x = 910 + index * 28;
+          const x = 916 + index * 28;
           const height = 28 + (index % 3) * 17;
-          reedLines.moveTo(x, 300).lineTo(x - 4, 300 - height).stroke({ color: index % 2 ? 0x53693e : 0x77824c, width: 4 });
-          reedLines.moveTo(x - 3, 300 - height + 6).lineTo(x - 17, 300 - height - 8).stroke({ color: 0x77824c, width: 2 });
+          fallbackReeds
+            .moveTo(x, 300)
+            .lineTo(x - 4, 300 - height)
+            .stroke({ color: index % 2 ? 0x526d50 : 0x7b8351, width: 4 });
+          fallbackReeds
+            .moveTo(x - 3, 300 - height + 6)
+            .lineTo(x - 17, 300 - height - 8)
+            .stroke({ color: 0x7b8351, width: 2 });
         }
         const bridge = new Graphics()
-          .rect(1010, 228, 190, 18).fill({ color: 0x77573b })
-          .rect(1030, 246, 11, 78).fill({ color: 0x674d36 })
-          .rect(1167, 246, 11, 78).fill({ color: 0x674d36 })
-          .rect(1004, 218, 9, 35).fill({ color: 0x674d36 })
-          .rect(1195, 218, 9, 35).fill({ color: 0x674d36 });
+          .rect(1002, 226, 198, 17)
+          .fill({ color: 0x624c3e })
+          .rect(1024, 243, 11, 78)
+          .fill({ color: 0x4b3d36 })
+          .rect(1168, 243, 11, 78)
+          .fill({ color: 0x4b3d36 })
+          .rect(997, 215, 9, 34)
+          .fill({ color: 0x4b3d36 })
+          .rect(1196, 215, 9, 34)
+          .fill({ color: 0x4b3d36 });
         const dock = new Graphics()
-          .rect(92, 423, 225, 24).fill({ color: 0x9a7142 })
-          .rect(104, 447, 14, 112).fill({ color: 0x755737 })
-          .rect(282, 447, 14, 112).fill({ color: 0x755737 })
-          .rect(93, 432, 224, 3).fill({ color: 0xc49a5a, alpha: 0.8 });
+          .rect(84, 419, 236, 23)
+          .fill({ color: 0x8f6842 })
+          .rect(98, 442, 14, 118)
+          .fill({ color: 0x634b38 })
+          .rect(284, 442, 14, 118)
+          .fill({ color: 0x634b38 })
+          .rect(86, 427, 235, 3)
+          .fill({ color: 0xc49a5a, alpha: 0.8 });
+        fallbackWorld.addChild(fallbackSky, fallbackBank, fallbackWater, distantHouses, fallbackReeds, bridge, dock);
+
+        const backgroundSprite = new Sprite(Texture.EMPTY);
+        backgroundSprite.anchor.set(0.5);
+        backgroundSprite.visible = false;
+        backgroundSpriteRef.current = backgroundSprite;
+
+        const moonHalo = new Graphics()
+          .ellipse(942, 103, 100, 100)
+          .fill({ color: 0xd6e8d4, alpha: 0.055 });
+        const lightRays = new Graphics()
+          .moveTo(900, 134)
+          .lineTo(738, 412)
+          .lineTo(828, 412)
+          .closePath()
+          .fill({ color: 0xdfe5c0, alpha: 0.045 })
+          .moveTo(965, 140)
+          .lineTo(913, 402)
+          .lineTo(982, 402)
+          .closePath()
+          .fill({ color: 0xf0dfb1, alpha: 0.038 })
+          .moveTo(838, 154)
+          .lineTo(648, 403)
+          .lineTo(708, 403)
+          .closePath()
+          .fill({ color: 0xb9d4ca, alpha: 0.03 });
+        const mistLayer = new Container();
+        const mistBands = [
+          new Graphics().ellipse(370, 315, 220, 25).fill({ color: 0xd8e2ce, alpha: 0.055 }),
+          new Graphics().ellipse(612, 337, 270, 27).fill({ color: 0xc8ddd1, alpha: 0.045 }),
+          new Graphics().ellipse(874, 300, 170, 18).fill({ color: 0xe4dfc8, alpha: 0.04 }),
+        ];
+        mistLayer.addChild(...mistBands);
+
+        const waterSheen = new Graphics();
+        for (let index = 0; index < 12; index += 1) {
+          const y = 394 + index * 25;
+          const width = 38 + (index % 4) * 18;
+          const x = 350 + (index % 5) * 125;
+          waterSheen
+            .moveTo(x, y)
+            .lineTo(x + width, y - 3)
+            .stroke({ color: index % 3 === 0 ? 0xd6d6a4 : 0x9cc4b0, width: index % 4 === 0 ? 2 : 1, alpha: 0.12 });
+        }
+        const depthWash = new Graphics()
+          .rect(0, 428, SCENE_WIDTH, SCENE_HEIGHT - 428)
+          .fill({ color: 0x062e3b, alpha: 0.095 });
+        const foregroundFrame = new Graphics()
+          .moveTo(0, SCENE_HEIGHT)
+          .lineTo(0, 604)
+          .lineTo(116, 662)
+          .lineTo(186, SCENE_HEIGHT)
+          .closePath()
+          .fill({ color: 0x071f28, alpha: 0.3 })
+          .moveTo(SCENE_WIDTH, SCENE_HEIGHT)
+          .lineTo(SCENE_WIDTH, 570)
+          .lineTo(1118, 640)
+          .lineTo(1048, SCENE_HEIGHT)
+          .closePath()
+          .fill({ color: 0x071f28, alpha: 0.34 });
+
         const sceneArtwork = new Sprite(Texture.EMPTY);
         sceneArtwork.anchor.set(0.5);
         sceneArtwork.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
         sceneArtwork.visible = false;
         artworkSpriteRef.current = sceneArtwork;
-        const line = new Graphics();
-        const bobber = new Container();
-        const bobberBody = new Graphics()
-          .ellipse(0, 0, 13, 28).fill({ color: 0xf07855 })
-          .rect(-12, -5, 24, 10).fill({ color: 0xf0d69a })
-          .ellipse(0, -24, 5, 6).fill({ color: 0x493d30 });
-        bobber.addChild(bobberBody);
-        const fish = new Container();
-        const fishColor = new Graphics()
-          .moveTo(-62, 0).lineTo(-114, -40).lineTo(-108, 0).lineTo(-114, 40).closePath().fill({ color: 0xe4ae61 })
-          .ellipse(-7, 0, 68, 36).fill({ color: 0xe4ae61 })
-          .moveTo(-12, -30).lineTo(8, -61).lineTo(31, -26).closePath().fill({ color: 0xb57c4a })
-          .moveTo(14, 29).lineTo(37, 53).lineTo(45, 26).closePath().fill({ color: 0xb57c4a })
-          .ellipse(39, -7, 5, 5).fill({ color: 0x253d39 })
-          .ellipse(40, -7, 1.6, 1.6).fill({ color: 0xf0d69a });
-        fish.addChild(fishColor);
-        const shadow = new Graphics().ellipse(0, 0, 102, 22).fill({ color: 0x082f36, alpha: 0.28 });
+        const artworkAura = new Graphics()
+          .ellipse(805, 455, 385, 232)
+          .fill({ color: 0x8887cf, alpha: 0.035 });
+        const artworkVeil = new Graphics()
+          .rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
+          .fill({ color: 0x071a2a, alpha: 0.095 });
 
-        world.addChild(sky, farBank, water, distantHouses, reedLines, bridge, dock, sceneArtwork, line, bobber, shadow, fish);
-        app.stage.addChild(world);
-        loadArtwork(sceneState.current.artwork);
+        const lineShadow = new Graphics();
+        const line = new Graphics();
+        const actionWake = new Graphics()
+          .ellipse(0, 0, 72, 13)
+          .stroke({ color: 0xd9e5b4, width: 3, alpha: 0.75 });
+        const actionSplash = new Graphics()
+          .moveTo(-34, 8).lineTo(-18, -18).lineTo(-7, 6)
+          .moveTo(7, 6).lineTo(18, -22).lineTo(34, 8)
+          .stroke({ color: 0xf0d69a, width: 3, alpha: 0.8 });
+        const actionSignal = new Graphics()
+          .circle(0, 0, 32)
+          .stroke({ color: 0xf07855, width: 3, alpha: 0.7 });
+        const bobber = new Container();
+        const bobberGlow = new Graphics()
+          .ellipse(0, 11, 33, 15)
+          .fill({ color: 0xf07855, alpha: 0.1 });
+        const bobberBody = new Graphics()
+          .ellipse(0, 0, 13, 27)
+          .fill({ color: 0xf07855 })
+          .rect(-12, -5, 24, 10)
+          .fill({ color: 0xf0d69a })
+          .ellipse(0, -25, 5, 6)
+          .fill({ color: 0x423a35 })
+          .ellipse(0, 15, 8, 9)
+          .fill({ color: 0xb94731, alpha: 0.62 });
+        bobber.addChild(bobberGlow, bobberBody);
 
         const ripples = [
-          new Graphics().ellipse(0, 0, 46, 7).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.58 }),
-          new Graphics().ellipse(0, 0, 29, 5).stroke({ color: 0xd4d6a7, width: 1.5, alpha: 0.66 }),
-          new Graphics().ellipse(0, 0, 15, 3).stroke({ color: 0xe4dfb3, width: 1, alpha: 0.52 }),
-        ] as const;
-        for (const ripple of ripples) world.addChild(ripple);
+          new Graphics().ellipse(0, 0, 58, 10).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.54 }),
+          new Graphics().ellipse(0, 0, 40, 7).stroke({ color: 0xd4d6a7, width: 1.5, alpha: 0.58 }),
+          new Graphics().ellipse(0, 0, 23, 4).stroke({ color: 0xe4dfb3, width: 1, alpha: 0.5 }),
+          new Graphics().ellipse(0, 0, 76, 13).stroke({ color: 0x8db9a8, width: 1, alpha: 0.22 }),
+        ];
+        const sparklePoints = [
+          { x: 412, y: 462 },
+          { x: 650, y: 506 },
+          { x: 796, y: 418 },
+          { x: 972, y: 545 },
+          { x: 1052, y: 456 },
+        ];
+        const surfaceSparkles = sparklePoints.map(({ x, y }, index) => {
+          const sparkle = new Graphics()
+            .ellipse(0, 0, index % 2 === 0 ? 2.5 : 1.5, index % 2 === 0 ? 5 : 3)
+            .fill({ color: index % 2 === 0 ? 0xf3e4ae : 0xb5d9c8, alpha: 0.28 });
+          sparkle.position.set(x, y);
+          return sparkle;
+        });
+
+        world.addChild(
+          fallbackWorld,
+          backgroundSprite,
+          moonHalo,
+          lightRays,
+          mistLayer,
+          waterSheen,
+          depthWash,
+          sceneArtwork,
+          artworkAura,
+          artworkVeil,
+          ...surfaceSparkles,
+          ...ripples,
+          lineShadow,
+          line,
+          actionWake,
+          actionSplash,
+          actionSignal,
+          bobber,
+          foregroundFrame,
+        );
+        app.stage.addChild(world);
+        loadBackground();
+        loadArtwork(sceneState.current.artwork);
 
         const resizeScene = () => {
           const scale = Math.min(app.screen.width / SCENE_WIDTH, app.screen.height / SCENE_HEIGHT);
@@ -221,62 +409,148 @@ export function CanalScene({
           const state = sceneState.current;
           const motion = state.reducedMotion ? 0 : 1;
           elapsed += ticker.deltaMS * 0.001 * motion;
+          if (state.eventSequence !== lastEventSequence) {
+            lastEventSequence = state.eventSequence;
+            feedbackPulse = motion ? 1 : 0;
+            actionPulse = motion ? 1 : 0;
+            actionKind = state.fishAction;
+          }
+          if (motion) feedbackPulse = Math.max(0, feedbackPulse - ticker.deltaMS / 310);
+          if (motion) actionPulse = Math.max(0, actionPulse - ticker.deltaMS / 280);
+
           const active = state.phase === 'player-turn';
           const encounterVisible = active || state.phase === 'caught';
+          const backgroundReady = backgroundSprite.texture !== Texture.EMPTY;
           const artReady = sceneArtwork.texture !== Texture.EMPTY;
-          sceneArtwork.visible = encounterVisible && artReady;
-          if (sceneArtwork.visible) {
+          const fishArtworkVisible = encounterVisible && artReady;
+          fallbackWorld.visible = !backgroundReady;
+          backgroundSprite.visible = backgroundReady && !fishArtworkVisible;
+          sceneArtwork.visible = fishArtworkVisible;
+          artworkAura.visible = fishArtworkVisible;
+          artworkVeil.visible = fishArtworkVisible;
+
+          const eventJolt = state.event === 'fish-action' || state.event === 'line-damaged' || state.event === 'line-break'
+            ? feedbackPulse
+            : feedbackPulse * 0.45;
+          const distanceRatio = Math.max(0, Math.min(1, state.fishDistance / 100));
+          if (artReady) {
+            const intentMotion = state.fishIntent === 'power-dash'
+              ? Math.sin(elapsed * 11) * 4.5
+              : state.fishIntent === 'deep-dive'
+                ? 12
+                : state.fishIntent === 'thrash'
+                  ? Math.sin(elapsed * 14) * 2.2
+                  : Math.sin(elapsed * 0.9) * 1.7;
+            const actionOffset = state.fishAction === 'pull'
+              ? -8
+              : state.fishAction === 'release'
+                ? 7
+                : state.fishAction === 'reel'
+                  ? -4
+                  : 0;
             const artMotion = motion
-              ? state.bossPhase === 3
-                ? 1.025
-                : state.fishIntent === 'power-dash'
-                  ? 1.012 + Math.sin(elapsed * 8) * 0.004
-                  : 1.004 + Math.sin(elapsed * 1.2) * 0.005
+              ? 1 + (state.bossPhase === 3 ? 0.018 : state.fishRarity === 'king' ? 0.01 : 0.004) + Math.sin(elapsed * 1.15) * 0.004 + eventJolt * 0.008
               : 1;
-            sceneArtwork.scale.set(artworkScaleRef.current * artMotion);
+            const artTilt = state.fishAction === 'brace' ? -0.008 : state.fishAction === 'observe' ? 0.006 : 0;
+            sceneArtwork.scale.set(artworkScaleRef.current * artMotion * (1 + (1 - distanceRatio) * 0.012));
+            sceneArtwork.position.set(
+              SCENE_WIDTH / 2 + (motion ? Math.sin(elapsed * 0.55) * 2.5 : 0) - eventJolt * 5,
+              SCENE_HEIGHT / 2 + actionOffset + intentMotion + (motion ? Math.sin(elapsed * 0.7) * 1.5 : 0),
+            );
+            sceneArtwork.rotation = artTilt + (state.fishIntent === 'thrash' && motion ? Math.sin(elapsed * 12) * 0.012 : 0);
           }
 
-          const floatX = active ? 520 + Math.sin(elapsed * 0.8) * 9 : 500;
+          const floatX = active
+            ? 520 + (motion ? Math.sin(elapsed * 0.8) * 12 : 0) + (state.fishIntent === 'power-dash' ? -eventJolt * 13 : 0)
+            : 500;
           const floatDepth = active && state.fishIntent === 'deep-dive'
-            ? 24
+            ? 26
             : active && state.fishIntent === 'power-dash'
-              ? -14
-              : state.phase === 'caught' ? 32 : 0;
-          const floatY = 327 + floatDepth + Math.sin(elapsed * (state.event === 'action-brace' ? 5 : 2)) * (active ? 3 : 1);
+              ? -15
+              : state.phase === 'caught'
+                ? 30
+                : 0;
+          const floatY = WATERLINE_Y + 18 + floatDepth + (motion ? Math.sin(elapsed * (state.event === 'action-brace' ? 5 : 2)) * (active ? 4 : 1) : 0) + eventJolt * 7;
+          const floatRotation = active ? Math.min(state.tension, 100) * 0.0017 : 0;
+          bobber.visible = state.phase !== 'escaped' && state.phase !== 'line-break';
           bobber.position.set(floatX, floatY);
-          bobber.rotation = active ? Math.min(state.tension, 100) * 0.0015 : 0;
+          bobber.rotation = floatRotation + (state.fishIntent === 'thrash' && motion ? Math.sin(elapsed * 12) * 0.12 : 0);
+          bobber.scale.set(1 + eventJolt * 0.12);
+          bobberGlow.alpha = 0.08 + (motion ? (Math.sin(elapsed * 2.2) + 1) * 0.025 : 0) + eventJolt * 0.18;
 
-          const distance = Math.max(0, Math.min(1, state.fishDistance / 100));
-          const fishX = 845 - distance * 400;
-          const dash = state.fishIntent === 'power-dash' && active ? Math.sin(elapsed * 10) * 18 : 0;
-          const diving = state.fishIntent === 'deep-dive' && active ? 48 : 0;
-          const thrashing = state.fishIntent === 'thrash' && active ? Math.sin(elapsed * 12) * 0.15 : 0;
-          const actionLift = state.fishAction === 'pull' ? -12 : state.fishAction === 'release' ? 8 : 0;
-          const actionTilt = state.fishAction === 'brace' ? -0.05 : state.fishAction === 'observe' ? 0.05 : 0;
-          const size = state.fishRarity === 'king' ? 1.28 : state.fishRarity === 'rare' ? 1.12 : 0.9;
-          const eventPulse = active && state.eventSequence % 2 === 0 ? 1.04 : 1;
-          fish.position.set(fishX + dash, 518 + diving + actionLift + Math.sin(elapsed * 1.8) * 5);
-          fish.rotation = thrashing + actionTilt;
-          fish.scale.set(size * eventPulse, (state.fishRarity === 'king' ? 1.28 : 0.9) * eventPulse);
-          fish.visible = encounterVisible && !artReady;
-          shadow.visible = fish.visible;
-          shadow.position.set(fishX + dash, 557 + diving * 0.25);
-          if (state.fishRarity === 'king') fishColor.tint = state.bossPhase === 3 ? 0xf07855 : 0xd7c78d;
-          else if (state.fishRarity === 'rare') fishColor.tint = 0xc3cf85;
-          else fishColor.tint = 0xffffff;
+          const lineVisible = encounterVisible;
+          line.visible = lineVisible;
+          lineShadow.visible = lineVisible;
+          if (lineVisible) {
+            const lineStartX = 220 - eventJolt * 3;
+            const lineStartY = 553 + eventJolt * 3;
+            const lineEndY = floatY - 23;
+            const curveTension = Math.min(state.tension, 100) * 0.4;
+            lineShadow
+              .clear()
+              .moveTo(lineStartX, lineStartY)
+              .bezierCurveTo(292, 445, 392, 410 + curveTension, floatX, lineEndY)
+              .stroke({ color: 0x041c26, width: 7, alpha: 0.26 });
+            line
+              .clear()
+              .moveTo(lineStartX, lineStartY)
+              .bezierCurveTo(292, 445, 392, 410 + curveTension, floatX, lineEndY)
+              .stroke({ color: state.tension > 70 ? 0xf07855 : 0xe8dfbd, width: 2.25, alpha: 0.96 });
+          }
 
-          line.visible = encounterVisible;
-          line.clear()
-            .moveTo(293, 425)
-            .bezierCurveTo(355, 351, 416, 343 + state.tension * 0.45, floatX, floatY - 24)
-            .stroke({ color: state.tension > 70 ? 0xf07855 : 0xe8dfbd, width: 2.5, alpha: 0.94 });
+          const rippleY = floatY + 25;
+          const rippleBreath = motion ? 0.86 + ((Math.sin(elapsed * 1.25) + 1) / 2) * 0.35 : 1;
+          const rippleImpulse = 1 + eventJolt * 0.72;
+          for (let index = 0; index < ripples.length; index += 1) {
+            const ripple = ripples[index]!;
+            ripple.visible = bobber.visible;
+            ripple.position.set(floatX, rippleY);
+            ripple.scale.set(rippleBreath * rippleImpulse * (1 + index * 0.08));
+            ripple.alpha = (active ? 0.78 : 0.45) * (index === 3 ? 0.5 : 1) + eventJolt * (index === 0 ? 0.28 : 0.08);
+          }
 
-          const rippleX = active ? floatX : 500;
-          for (const ripple of ripples) ripple.position.set(rippleX, 356);
-          const rippleScale = state.reducedMotion ? 1 : 0.74 + ((Math.sin(elapsed * 1.2) + 1) / 2) * 0.48;
-          ripples[0].scale.set(rippleScale);
-          ripples[1].scale.set(rippleScale * 0.88);
-          ripples[2].scale.set(rippleScale * 0.78);
+          const actionVisible = actionPulse > 0 && bobber.visible;
+          const actionStrength = actionPulse * actionPulse;
+          const outcomeTint = state.lastCheckOutcome === 'critical-failure' ? 0xff7666
+            : state.lastCheckOutcome === 'critical-success' ? 0xc0dfb1
+              : 0xf07855;
+          const criticalOutcome = state.lastCheckOutcome === 'critical-failure' || state.lastCheckOutcome === 'critical-success';
+          actionWake.visible = actionVisible && (actionKind === 'reel' || actionKind === 'pull');
+          actionSplash.visible = actionVisible && (actionKind === 'release' || actionKind === 'brace');
+          actionSignal.visible = actionVisible && (actionKind === 'observe' || criticalOutcome);
+          actionWake.tint = outcomeTint;
+          actionSplash.tint = outcomeTint;
+          actionSignal.tint = outcomeTint;
+          actionWake.position.set(floatX, rippleY + 2);
+          actionWake.rotation = actionKind === 'pull' ? -0.42 : 0;
+          actionWake.scale.set(
+            actionKind === 'pull' ? 0.72 + actionPulse * 0.2 : 1 + (1 - actionPulse) * 0.7,
+            actionKind === 'pull' ? 1.35 - actionPulse * 0.25 : 1 - actionStrength * 0.25,
+          );
+          actionWake.alpha = actionStrength;
+          actionSplash.position.set(floatX, rippleY - 2);
+          actionSplash.rotation = actionKind === 'brace' ? Math.PI / 2 : 0;
+          actionSplash.scale.set(
+            actionKind === 'brace' ? 0.62 + actionPulse * 0.18 : 1.18 - actionPulse * 0.2,
+            actionKind === 'brace' ? 1.25 - actionPulse * 0.3 : 0.72 + actionPulse * 0.25,
+          );
+          actionSplash.alpha = actionStrength;
+          actionSignal.position.set(floatX, floatY - 3);
+          actionSignal.scale.set(criticalOutcome ? 1.15 + (1 - actionPulse) * 0.85 : 1 + (1 - actionPulse) * 0.65);
+          actionSignal.alpha = actionStrength;
+
+          for (let index = 0; index < mistBands.length; index += 1) {
+            const mist = mistBands[index]!;
+            if (motion) mist.position.x = Math.sin(elapsed * 0.12 + index * 1.7) * (index + 1) * 8;
+            mist.alpha = 0.62 + (motion ? Math.sin(elapsed * 0.5 + index) * 0.08 : 0);
+          }
+          lightRays.alpha = 0.8 + (motion ? Math.sin(elapsed * 0.35) * 0.08 : 0);
+          waterSheen.alpha = fishArtworkVisible ? 0.58 : 0.84;
+          for (let index = 0; index < surfaceSparkles.length; index += 1) {
+            const sparkle = surfaceSparkles[index]!;
+            sparkle.alpha = 0.12 + (motion ? (Math.sin(elapsed * (1.2 + index * 0.18) + index) + 1) * 0.08 : 0.08);
+            if (motion) sparkle.rotation = Math.sin(elapsed * 0.8 + index) * 0.18;
+          }
         });
       } catch {
         if (!disposed) setSceneError(true);
@@ -286,12 +560,14 @@ export function CanalScene({
     void start();
     return () => {
       disposed = true;
+      backgroundRequestRef.current += 1;
       artworkRequestRef.current += 1;
+      backgroundSpriteRef.current = null;
       artworkSpriteRef.current = null;
       resizeObserver?.disconnect();
       if (initialized) app.destroy(true, { children: true });
     };
-  }, [loadArtwork]);
+  }, [loadArtwork, loadBackground]);
 
   return (
     <figure className="canal-scene" aria-label={`${spotName}. ${description}`}>

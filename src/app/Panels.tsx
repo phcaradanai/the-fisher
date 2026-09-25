@@ -25,6 +25,10 @@ function numberText(value: number, locale: Locale, fractionDigits = 0): string {
   }).format(value);
 }
 
+function weightText(weightKg: number, locale: Locale): string {
+  return weightKg < 0.005 ? `<${numberText(0.01, locale, 2)}` : numberText(weightKg, locale, 2);
+}
+
 function markSoundGesture(action: () => void): void {
   unlockFishingAudio();
   action();
@@ -40,10 +44,10 @@ function FishArtworkImage({
   className: string;
   loading?: 'eager' | 'lazy';
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedArtwork, setFailedArtwork] = useState<string | null>(null);
   const name = localize(fish.name, locale);
 
-  if (failed) {
+  if (failedArtwork === fish.artwork) {
     return (
       <div className={`${className} fish-artwork-fallback`} role="img" aria-label={name} data-rarity={fish.rarity}>
         <span className="fish-mark" aria-hidden="true">
@@ -61,7 +65,7 @@ function FishArtworkImage({
       alt={name}
       loading={loading}
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => setFailedArtwork(fish.artwork)}
     />
   );
 }
@@ -83,8 +87,13 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
   const fish = getActiveFish(session);
   const fishProfile = fish ? toTurnFishProfile(fish) : null;
   const gearStats = toTurnGearStats(getEquippedGearItems({ equippedGear }));
+  const fishCollection = useGameStore((state) => state.fishCollection);
   const bait = GEAR.find((item) => item.id === selectedBaitId);
   const baitTargets = bait ? FISH.filter((item) => bait.baitTargets?.includes(item.id)) : [];
+  const discoveredBaitTargets = baitTargets.filter((target) => {
+    const record = fishCollection[target.id];
+    return (record?.knowledgeLevel ?? 0) >= 2;
+  });
   const phase = session?.phase ?? 'ready';
   const inDuel = phase === 'player-turn';
   const canChangeSpot = phase !== 'player-turn' && phase !== 'caught';
@@ -102,6 +111,29 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
         : tension >= 15 ? 'safe'
           : 'slack';
   const result = session?.result;
+  const catchRecord = result ? fishCollection[result.fishId] : undefined;
+  const firstCatch = catchRecord?.caught === 1;
+  const catchKnowledgeLevel = catchRecord?.knowledgeLevel ?? 0;
+  const catchBestWeight = catchRecord?.bestWeightKg ?? 0;
+  const catchBestLength = catchRecord?.largestLengthCm ?? 0;
+  const discoveredFishCount = FISH.filter((item) => {
+    const record = fishCollection[item.id];
+    return (record?.knowledgeLevel ?? 0) > 0 || (record?.caught ?? 0) > 0;
+  }).length;
+  const firstEncounter = Object.keys(fishCollection).length === 0;
+  const showFirstCastGuidance = firstEncounter && phase === 'ready';
+  const showFirstTurnGuidance = firstEncounter && inDuel && !session?.lastAction;
+  const intentSession = session?.insight ? { ...session, insight: false } : session;
+  const intentCounter = intentSession && fishProfile
+    ? FIGHT_ACTIONS.find((action) => previewTurnFishingAction(intentSession, action, fishProfile, gearStats).mode === 'advantage')
+    : null;
+  const buildIsPowerLed = gearStats.power > gearStats.control;
+  const buildProfile = buildIsPowerLed ? copy.powerBuild : copy.controlBuild;
+  const primaryBuildStat = buildIsPowerLed ? gearStats.power : gearStats.control;
+  const secondaryBuildStat = buildIsPowerLed ? gearStats.control : gearStats.power;
+  const negativeEffects = (['power', 'control', 'lineStrength', 'reelSpeed', 'attraction', 'skillPower'] as const)
+    .map((key) => ({ key, value: gearStats[key === 'skillPower' ? 'instinct' : key === 'attraction' ? 'luck' : key] }))
+    .filter(({ value }) => value < 0);
 
   const runAction = (action: TurnFishingAction) => {
     markSoundGesture(() => act(action));
@@ -145,6 +177,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             fishRarity={fish?.rarity ?? null}
             phase={phase}
             bossPhase={session?.bossPhase ?? null}
+            lastCheckOutcome={session?.lastCheck?.outcome ?? null}
             reducedMotion={reducedMotion}
             spotName={localize(selectedSpot.name, locale)}
             tension={session?.tension ?? 0}
@@ -157,9 +190,10 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                   {session.bossPhase && <span>{copy.bossPhase[session.bossPhase]}</span>}
                 </div>
                 <h3>{localize(fish.name, locale)}</h3>
-                <div className="scene-callout__intent">
+                <div className="scene-callout__intent" data-intent={session.currentIntent.type}>
                   <strong>{copy.intentName[session.currentIntent.type]}</strong>
                   <span>{copy.intentHint[session.currentIntent.type]}</span>
+                  {intentCounter && <span className="scene-callout__counter">{copy[intentCounter]}</span>}
                 </div>
               </>
             ) : (
@@ -172,10 +206,23 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           {inDuel && session && (
             <div className="turn-counter" aria-label={`${copy.turn} ${session.turn}, ${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
               <span>{copy.turn} <strong>{numberText(session.turn, locale)}</strong></span>
-              <span>{copy.actionPoints} <strong>{numberText(session.ap, locale)} / {numberText(session.maxAp, locale)}</strong></span>
+              <span className="turn-counter__ap">
+                <span>{copy.actionPoints}</span>
+                <strong>{numberText(session.ap, locale)} / {numberText(session.maxAp, locale)}</strong>
+              </span>
             </div>
           )}
           <span className="scene-location">{localize(selectedSpot.name, locale)}</span>
+          {phase === 'ready' && (
+            <div className="scene-ready-action">
+              {showFirstCastGuidance && (
+                <p className="scene-ready-action__hint" role="note">{copy.firstEncounter.castHint}</p>
+              )}
+              <button className="action-button action-button--cast" onClick={() => markSoundGesture(cast)}>
+                {copy.cast}
+              </button>
+            </div>
+          )}
         </div>
 
         {session && fish && (
@@ -215,17 +262,15 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           </section>
         )}
 
-        <section className="action-dock" aria-label={copy.fight}>
+        {phase !== 'ready' && <section className="action-dock" aria-label={copy.fight}>
           <p className="session-status" role="status" aria-live="polite" aria-atomic="true">
             {copy.phase[phase]}
           </p>
-          {phase === 'ready' && (
-            <button className="action-button action-button--cast" onClick={() => markSoundGesture(cast)}>
-              {copy.cast}
-            </button>
-          )}
           {inDuel && session && fishProfile && (
             <>
+              {showFirstTurnGuidance && (
+                <p className="first-encounter-guide" role="note">{copy.firstEncounter.turnHint}</p>
+              )}
               <div className="fight-actions" aria-label={copy.fight}>
                 {FIGHT_ACTIONS.map((action) => {
                   const preview = previewTurnFishingAction(session, action, fishProfile, gearStats);
@@ -235,15 +280,20 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                       key={action}
                       onClick={() => runAction(action)}
                       disabled={session.ap < 1}
+                      aria-label={`${copy[action]}. ${preview.mode ? copy.mode[preview.mode] : copy.automatic}. ${copy.actionHint[action]}${preview.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
                       title={`${copy.actionHint[action]} ${preview.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
                     >
                       <span className="action-button__top">
+                        <span className="action-button__signal" aria-hidden="true" />
                         <strong>{copy[action]}</strong>
                         <span className={`action-matchup action-matchup--${preview.mode ?? 'automatic'}`}>
                           {preview.mode ? copy.mode[preview.mode] : copy.automatic}
                         </span>
                       </span>
                       <span className="action-button__hint">{copy.actionHint[action]}</span>
+                      {showFirstTurnGuidance && (
+                        <span className="action-button__role">{copy.firstEncounter.role[action]}</span>
+                      )}
                       {preview.modeReason && (
                         <span className="action-button__reason">{copy.modeReason[preview.modeReason]}</span>
                       )}
@@ -267,14 +317,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                   </div>
                   {session.lastCheck ? (
                     <>
-                      <p>
+                      <p className="last-check__details">
                         {copy.checkRolls}: {session.lastCheck.rolls.join(' / ')}
                         {' · '}{copy.checkTotal}: {numberText(session.lastCheck.die, locale)}
                         {' '}{session.lastCheck.modifier < 0 ? '−' : '+'} {numberText(Math.abs(session.lastCheck.modifier), locale)}
                         {' = '}{numberText(session.lastCheck.total, locale)}
                         {' · '}{copy.difficulty}: {numberText(session.lastCheck.difficulty, locale)}
                       </p>
-                      <p>{copy.modeReason[session.lastCheck.modeReason]}</p>
+                      <p className="last-check__reason">{copy.modeReason[session.lastCheck.modeReason]}</p>
                     </>
                   ) : (
                     <p>{copy.actionHint[session.lastAction]}</p>
@@ -293,16 +343,52 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             </div>
           )}
           {phase === 'caught' && result && fish && (
-            <section className="catch-reveal" aria-labelledby="catch-title">
+            <section
+              className={`catch-reveal catch-reveal--${fish.rarity}`}
+              aria-labelledby="catch-title"
+            >
+              <div className="catch-reveal__hero">
                 <FishArtworkImage fish={fish} locale={locale} className="catch-reveal__artwork" loading="eager" />
-              <div className="catch-reveal__copy">
-                <p className="catch-reveal__state">{copy.caught}</p>
-                <h3 id="catch-title">{localize(fish.name, locale)}</h3>
-                <p>{copy.rarity[fish.rarity]} · {copy.weight} {numberText(result.weightKg, locale, 2)} kg · {copy.length} {numberText(result.lengthCm, locale)} cm</p>
+                <div className="catch-reveal__headline">
+                  <div className="catch-reveal__eyebrow">
+                    <span>{copy.caught}</span>
+                    {firstCatch && <span className="catch-reveal__badge">{copy.firstCatch}</span>}
+                  </div>
+                  <h3 id="catch-title">{localize(fish.name, locale)}</h3>
+                  <p className="catch-reveal__rarity">{copy.rarity[fish.rarity]}</p>
+                  <p className="catch-reveal__discovery"><span>{copy.discovery}</span> {localize(fish.collection.entry, locale)}</p>
+                </div>
               </div>
+
+              <div className="catch-reveal__details">
+                <dl className="catch-reveal__measurements">
+                  <div><dt>{copy.length}</dt><dd>{numberText(result.lengthCm, locale)} <span>cm</span></dd></div>
+                  <div><dt>{copy.weight}</dt><dd>{weightText(result.weightKg, locale)} <span>kg</span></dd></div>
+                </dl>
+                <div className="catch-reveal__record">
+                  <span>{copy.record}</span>
+                  <strong>{weightText(catchBestWeight, locale)} kg · {numberText(catchBestLength, locale)} cm</strong>
+                </div>
+              </div>
+
+              <div className="catch-reveal__progress" aria-label={`${copy.reward}, ${copy.collectionProgress}`}>
+                <div>
+                  <span>{copy.reward}</span>
+                  <strong>+{numberText(fish.rewards.reputation, locale)} {copy.earnedReputation}</strong>
+                </div>
+                <div>
+                  <span>{copy.knowledgeProgress}</span>
+                  <strong>{numberText(catchKnowledgeLevel, locale)} / 3</strong>
+                </div>
+                <div>
+                  <span>{copy.collectionProgress}</span>
+                  <strong>{numberText(discoveredFishCount, locale)} / {numberText(FISH.length, locale)}</strong>
+                </div>
+              </div>
+
               <div className="catch-reveal__actions">
                 <button className="action-button action-button--sell" onClick={() => settleCatch('sell')}>
-                  {copy.sell} {numberText(fish.sellValue, locale)} {copy.coins}
+                  {copy.sellReward}: {numberText(fish.sellValue, locale)} {copy.coins}
                 </button>
                 <button className="action-button action-button--keep" onClick={() => settleCatch('keep')}>
                   {copy.keep}
@@ -310,7 +396,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               </div>
             </section>
           )}
-        </section>
+        </section>}
       </section>
 
       <aside className="preparation-rail" aria-label={copy.setup}>
@@ -322,12 +408,27 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             </div>
             <button className="text-action" onClick={() => setTab('gear')}>{copy.gear}</button>
           </header>
-          <dl className="build-stats">
-            <div><dt>{copy.stat.control}</dt><dd>{numberText(gearStats.control, locale, 1)}</dd></div>
-            <div><dt>{copy.stat.power}</dt><dd>{numberText(gearStats.power, locale, 1)}</dd></div>
-            <div><dt>{copy.stat.reelSpeed}</dt><dd>{numberText(gearStats.reelSpeed, locale, 1)}</dd></div>
-            <div><dt>{copy.stat.lineStrength}</dt><dd>{numberText(gearStats.lineStrength, locale, 1)}</dd></div>
-          </dl>
+          <div className="build-profile" data-profile={buildIsPowerLed ? 'power' : 'control'}>
+            <div className="build-profile__heading">
+              <span>{copy.buildProfile}</span>
+              <strong>{buildProfile}</strong>
+            </div>
+            <div className="build-profile__axes" aria-label={`${copy.stat.power}, ${copy.stat.control}`}>
+              <span><b>{copy.stat.power}</b> {numberText(gearStats.power, locale, 1)}</span>
+              <span><b>{copy.stat.control}</b> {numberText(gearStats.control, locale, 1)}</span>
+            </div>
+            <div className="build-profile__notes">
+              <p>
+                <span>{copy.buildStrength}</span> {copy.stat[buildIsPowerLed ? 'power' : 'control']}{' '}
+                {primaryBuildStat > 0 ? '+' : ''}{numberText(primaryBuildStat, locale, 1)}
+                {secondaryBuildStat > 0 && ` · ${copy.stat[buildIsPowerLed ? 'control' : 'power']} +${numberText(secondaryBuildStat, locale, 1)}`}
+              </p>
+              <p><span>{copy.buildTradeoff}</span> {negativeEffects.length > 0
+                ? negativeEffects.map(({ key, value }) => `${copy.stat[key]} ${numberText(value, locale, 1)}`).join(' · ')
+                : copy.noPenalty}
+              </p>
+            </div>
+          </div>
           <ul className="setup-gear">
             {getEquippedGearItems({ equippedGear }).map((item) => (
               <li key={item.id}>
@@ -341,9 +442,12 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             <strong>{bait ? localize(bait.name, locale) : copy.unknownBaitTargets}</strong>
             <p>
               {copy.baitTargets}:{' '}
-              {baitTargets.length > 0
-                ? baitTargets.slice(0, 4).map((target) => localize(target.name, locale)).join(' · ')
-                : copy.unknownBaitTargets}
+              {discoveredBaitTargets.length > 0
+                ? discoveredBaitTargets.map((target) => localize(target.name, locale)).join(' · ')
+                : baitTargets.length > 0 ? copy.baitUnknownCount(baitTargets.length) : copy.unknownBaitTargets}
+              {discoveredBaitTargets.length > 0 && baitTargets.length > discoveredBaitTargets.length && (
+                <> · {copy.baitUnknownCount(baitTargets.length - discoveredBaitTargets.length)}</>
+              )}
             </p>
           </div>
         </section>
@@ -357,76 +461,122 @@ export function CollectionPanel({ copy, locale }: { copy: UiCopy; locale: Locale
   const collection = useGameStore((state) => state.fishCollection);
   const unique = FISH.filter((fish) => (collection[fish.id]?.knowledgeLevel ?? 0) > 0
     || (collection[fish.id]?.caught ?? 0) > 0).length;
+  const fishEntries = FISH.map((fish, index) => {
+    const record = collection[fish.id];
+    const knowledgeLevel = Math.max(record?.knowledgeLevel ?? 0, record?.caught ? 1 : 0);
+    return { fish, fishNumber: index + 1, record, knowledgeLevel, discovered: knowledgeLevel > 0 };
+  });
+  const discoveredEntries = fishEntries.filter((entry) => entry.discovered);
+  const [featuredFishId, setFeaturedFishId] = useState<string | null>(null);
+  const featuredEntry = discoveredEntries.find((entry) => entry.fish.id === featuredFishId) ?? discoveredEntries[0];
+  const featuredFish = featuredEntry?.fish;
 
   return (
-    <section className="archive-panel" aria-labelledby="collection-title">
-      <header className="panel-heading">
-        <h2 id="collection-title">{copy.collectionTitle}</h2>
-        <p>{copy.collectionDescription}</p>
-        <span className="panel-count">{numberText(unique, locale)} / {numberText(FISH.length, locale)}</span>
+    <section className="archive-panel collection-panel" aria-labelledby="collection-title">
+      <header className="collection-hero">
+        <div className="collection-hero__heading">
+          <p className="collection-hero__chapter">{copy.chapterOne}</p>
+          <h2 id="collection-title">{copy.collectionTitle}</h2>
+          <p>{copy.collectionDescription}</p>
+        </div>
+        <div className="collection-progress" aria-label={`${copy.collectionProgress}: ${unique} / ${FISH.length}`}>
+          <div className="collection-progress__label">
+            <span>{copy.collectionProgress}</span>
+            <strong>{numberText(unique, locale)} <small>/ {numberText(FISH.length, locale)}</small></strong>
+          </div>
+          <progress max={FISH.length} value={unique} aria-label={copy.collectionProgress} />
+          <span className="collection-progress__note">{copy.discovered} · {numberText(unique, locale)} / {numberText(FISH.length, locale)}</span>
+        </div>
       </header>
-      <ol className="fish-list">
-        {FISH.map((fish) => {
-          const record = collection[fish.id];
-          const knowledgeLevel = Math.max(record?.knowledgeLevel ?? 0, record?.caught ? 1 : 0);
-          const discovered = knowledgeLevel > 0;
-          const knownSpots = fish.spotIds
-            .map((spotId) => FISHING_SPOTS.find((spot) => spot.id === spotId))
-            .filter((spot) => spot !== undefined);
-          const usefulBaits = fish.preferredBaitIds
-            .map((baitId) => GEAR.find((item) => item.id === baitId))
-            .filter((bait) => bait !== undefined);
+      {featuredEntry && (() => {
+        const { fish, record, knowledgeLevel } = featuredEntry;
+        const knownSpots = fish.spotIds
+          .map((spotId) => FISHING_SPOTS.find((spot) => spot.id === spotId))
+          .filter((spot) => spot !== undefined);
+        const usefulBaits = fish.preferredBaitIds
+          .map((baitId) => GEAR.find((item) => item.id === baitId))
+          .filter((bait) => bait !== undefined);
 
+        return (
+          <article className="collection-featured" data-rarity={fish.rarity} aria-labelledby="featured-fish-title">
+            <div className="collection-featured__art-wrap">
+              <FishArtworkImage fish={fish} locale={locale} className="collection-featured__artwork" loading="eager" />
+              <span className="collection-featured__stamp">{copy.discovered}</span>
+            </div>
+            <div className="collection-featured__details">
+              <div className="fish-entry__heading">
+                <h3 id="featured-fish-title">{localize(fish.name, locale)}</h3>
+                <span className={`rarity-label rarity-label--${fish.rarity}`}>{copy.rarity[fish.rarity]}</span>
+              </div>
+              <p className="collection-featured__entry">{localize(fish.collection.entry, locale)}</p>
+              <dl className="knowledge-notes">
+                <div>
+                  <dt>{copy.knowledge}</dt>
+                  <dd>{copy.knowledgeLevel} {numberText(knowledgeLevel, locale)} / 3</dd>
+                </div>
+                {record && record.caught > 0 && (
+                  <div>
+                    <dt>{copy.record}</dt>
+                    <dd>{copy.catches} {numberText(record.caught, locale)} · {copy.bestCatch} {weightText(record.bestWeightKg, locale)} kg / {numberText(record.largestLengthCm, locale)} cm</dd>
+                  </div>
+                )}
+                {knowledgeLevel >= 1 && (
+                  <div>
+                    <dt>{copy.habitat}</dt>
+                    <dd>{knownSpots.map((spot) => localize(spot.name, locale)).join(' · ')} · {copy.activeTime}: {fish.activeTime.map((time) => copy.activeTimes[time]).join(' · ')}</dd>
+                  </div>
+                )}
+                {knowledgeLevel >= 2 && (
+                  <div>
+                    <dt>{copy.preferredBaits}</dt>
+                    <dd>{usefulBaits.map((item) => localize(item.name, locale)).join(' · ')}</dd>
+                  </div>
+                )}
+                {knowledgeLevel >= 3 && (
+                  <div>
+                    <dt>{copy.knownCounter}</dt>
+                    <dd>{copy.counterAdvice[toTurnFishProfile(fish).archetype]}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+          </article>
+        );
+      })()}
+      <ol className="fish-list fish-list--journal" aria-label={copy.collectionTitle}>
+        {fishEntries.map(({ fish, fishNumber, discovered }) => {
           return (
-            <li className={`fish-entry${discovered ? '' : ' fish-entry--unknown'}`} key={fish.id} data-rarity={fish.rarity}>
+            <li className={`fish-entry ${discovered ? 'fish-entry--known' : 'fish-entry--unknown'}`} key={fish.id} data-rarity={discovered ? fish.rarity : undefined}>
               {discovered ? (
                 <FishArtworkImage fish={fish} locale={locale} className="fish-entry__artwork" />
               ) : (
-                <span className="fish-mark" data-silhouette={fish.collection.silhouette} aria-hidden="true">
-                  <span className="fish-mark__tail" />
-                  <span className="fish-mark__body" />
-                </span>
+                <div className="fish-entry__mystery" aria-hidden="true">
+                  <span className="fish-entry__number">#{numberText(fishNumber, locale).padStart(2, '0')}</span>
+                  <span className="fish-mark" data-silhouette={fish.collection.silhouette}>
+                    <span className="fish-mark__tail" />
+                    <span className="fish-mark__body" />
+                  </span>
+                </div>
               )}
               <div className="fish-entry__details">
                 <div className="fish-entry__heading">
+                  {discovered && <span className="fish-entry__number">#{numberText(fishNumber, locale).padStart(2, '0')}</span>}
                   <h3>{discovered ? localize(fish.name, locale) : '???'}</h3>
+                  {!discovered && <span className="fish-entry__unknown-label">{copy.unknownSpecimen(fishNumber)}</span>}
                   {discovered && <span className={`rarity-label rarity-label--${fish.rarity}`}>{copy.rarity[fish.rarity]}</span>}
                 </div>
-                <p>{discovered ? localize(fish.collection.entry, locale) : copy.undiscovered}</p>
-                {record && record.caught > 0 && (
-                  <p className="fish-record">
-                    {copy.catches}: {numberText(record.caught, locale)} · {copy.bestCatch}: {numberText(record.bestWeightKg, locale, 2)} kg, {numberText(record.largestLengthCm, locale)} cm
-                  </p>
-                )}
                 {discovered && (
-                  <dl className="knowledge-notes">
-                    <div>
-                      <dt>{copy.knowledge}</dt>
-                      <dd>{copy.knowledgeLevel} {numberText(knowledgeLevel, locale)} / 3</dd>
-                    </div>
-                    {knowledgeLevel >= 1 && (
-                      <div>
-                        <dt>{copy.habitat}</dt>
-                        <dd>
-                          {knownSpots.map((spot) => localize(spot.name, locale)).join(' · ')}
-                          {' · '}{copy.activeTime}: {fish.activeTime.map((time) => copy.activeTimes[time]).join(' · ')}
-                        </dd>
-                      </div>
-                    )}
-                    {knowledgeLevel >= 2 && (
-                      <div>
-                        <dt>{copy.preferredBaits}</dt>
-                        <dd>{usefulBaits.map((item) => localize(item.name, locale)).join(' · ')}</dd>
-                      </div>
-                    )}
-                    {knowledgeLevel >= 3 && (
-                      <div>
-                        <dt>{copy.knownCounter}</dt>
-                        <dd>{copy.counterAdvice[toTurnFishProfile(fish).archetype]}</dd>
-                      </div>
-                    )}
-                  </dl>
+                  <button
+                    className="fish-entry__spotlight"
+                    type="button"
+                    aria-pressed={featuredFish?.id === fish.id}
+                    aria-label={`${copy.featureFish}: ${localize(fish.name, locale)}`}
+                    onClick={() => setFeaturedFishId(fish.id)}
+                  >
+                    {copy.featureFish}
+                  </button>
                 )}
+                {!discovered && <p>{copy.undiscovered}</p>}
               </div>
             </li>
           );
@@ -445,6 +595,7 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
   const buyGear = useGameStore((state) => state.buyGear);
   const equipGear = useGameStore((state) => state.equipGear);
   const categoryGear = GEAR.filter((item) => item.category === category);
+  const currentItem = equippedGear[category] ? GEAR.find((item) => item.id === equippedGear[category]) : undefined;
 
   return (
     <section className="archive-panel gear-panel" aria-labelledby="gear-title">
@@ -464,8 +615,32 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
           </button>
         ))}
       </nav>
-      <ul className="gear-list">
-        {categoryGear.map((item) => {
+      {currentItem && (
+        <section className="gear-featured" aria-labelledby="equipped-gear-title">
+          <div className="gear-featured__mark"><span className={`gear-mark gear-mark--${currentItem.category}`} aria-hidden="true" /></div>
+          <div className="gear-featured__details">
+            <p className="gear-section-label">{copy.equippedNow}</p>
+            <div className="gear-entry__heading">
+              <h3 id="equipped-gear-title">{localize(currentItem.name, locale)}</h3>
+              <span className="gear-tier">{copy.rarity[currentItem.rarity]}</span>
+            </div>
+            <p>{localize(currentItem.description, locale)}</p>
+            <ul className="gear-effects gear-featured__effects" aria-label={copy.stats}>
+              {EFFECT_ORDER.flatMap((key) => {
+                const effect = currentItem.effects[key];
+                if (effect === undefined || effect === 0) return [];
+                return [<li key={key}>{copy.stat[key]} <strong>{effect > 0 ? '+' : ''}{numberText(effect, locale)}</strong></li>];
+              })}
+            </ul>
+          </div>
+          <span className="equipped-label">{copy.equipped}</span>
+        </section>
+      )}
+      <div className="gear-alternatives-heading">
+        <span>{copy.availableAlternatives}</span>
+      </div>
+      <ul className="gear-list gear-list--alternatives">
+        {categoryGear.filter((item) => item.id !== currentItem?.id).map((item) => {
           const owned = ownedGearIds.includes(item.id);
           const isEquipped = equippedGear[item.category] === item.id;
           const locked = item.unlockAfter !== undefined && !seenStoryEvents.includes(item.unlockAfter);
@@ -477,14 +652,13 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
                   <h3>{localize(item.name, locale)}</h3>
                   <span className="gear-tier">{copy.rarity[item.rarity]}</span>
                 </div>
-                <p>{localize(item.description, locale)}</p>
-                <ul className="gear-effects" aria-label={copy.stats}>
+                <p className="gear-comparison">
+                  <span>{copy.compare}</span>
                   {EFFECT_ORDER.flatMap((key) => {
-                    const effect = item.effects[key];
-                    if (effect === undefined || effect === 0) return [];
-                    return [<li key={key}>{copy.stat[key]} <strong>{effect > 0 ? '+' : ''}{numberText(effect, locale)}</strong></li>];
-                  })}
-                </ul>
+                    const delta = (item.effects[key] ?? 0) - (currentItem?.effects[key] ?? 0);
+                    return delta === 0 ? [] : [`${copy.stat[key]} ${delta > 0 ? '+' : ''}${numberText(delta, locale)}`];
+                  }).join(' · ') || '—'}
+                </p>
               </div>
               <div className="gear-entry__action">
                 {owned ? (
