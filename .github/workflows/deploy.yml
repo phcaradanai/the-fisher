@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/competition-visual-polish
+      - feat/living-canal-cinemagraph
   workflow_dispatch:
 
 permissions:
