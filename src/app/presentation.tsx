@@ -16,17 +16,17 @@ const FishingPresentationContext = createContext<FishingPresentationState>({
 });
 
 const EVENT_DURATION_MS: Record<TurnPresentationEvent['type'], number> = {
-  CAST: 390,
-  PLAYER_ACTION_RESOLVED: 130,
-  CHECK_RESOLVED: 120,
-  AP_CHANGED: 35,
-  STAMINA_DAMAGED: 60,
-  LINE_DAMAGED: 70,
-  FISH_ACTION_RESOLVED: 130,
-  INTENT_REVEALED: 130,
-  FISH_CAUGHT: 470,
-  ESCAPED: 180,
-  LINE_BREAK: 200,
+  CAST: 680,
+  PLAYER_ACTION_RESOLVED: 180,
+  CHECK_RESOLVED: 150,
+  AP_CHANGED: 40,
+  STAMINA_DAMAGED: 80,
+  LINE_DAMAGED: 100,
+  FISH_ACTION_RESOLVED: 180,
+  INTENT_REVEALED: 180,
+  FISH_CAUGHT: 850,
+  ESCAPED: 320,
+  LINE_BREAK: 340,
 };
 
 export function FishingPresentationProvider({ children }: { children: ReactNode }) {
@@ -60,6 +60,7 @@ export function presentationCombatEvent(event: TurnPresentationEvent | null): Tu
   if (!event) return null;
   switch (event.type) {
     case 'CAST':
+      return 'cast';
     case 'INTENT_REVEALED':
       return 'fish-intent';
     case 'PLAYER_ACTION_RESOLVED':

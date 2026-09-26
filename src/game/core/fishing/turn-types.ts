@@ -76,6 +76,7 @@ export interface SkillCheckResult {
 }
 
 export type TurnCombatEvent =
+  | 'cast'
   | 'action-reel'
   | 'action-pull'
   | 'action-release'
