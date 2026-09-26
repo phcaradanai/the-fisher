@@ -22,8 +22,8 @@ export class EncounterLayer {
   public readonly eventFlash = new Graphics();
 
   constructor() {
-    // Initialize Boss Vignette
-    this.bossVignette.rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT).fill({ color: 0x1d0b36, alpha: 0 });
+    // Initialize Boss Vignette (deep atmospheric canal pressure, not comic purple)
+    this.bossVignette.rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT).fill({ color: 0x02070e, alpha: 0 });
 
     // Initialize Event Flash
     this.eventFlash.rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT).fill({ color: 0xdff3dc, alpha: 0 });
@@ -141,9 +141,9 @@ export class EncounterLayer {
 
     const distanceRatio = Math.max(0, Math.min(1, state.fishDistance / 100));
 
-    // Boss Abyssal Vignette
+    // Boss Abyssal Vignette (subtle deep pressure)
     if (isKing) {
-      const targetAlpha = state.bossPhase === 3 ? 0.38 : state.bossPhase === 2 ? 0.25 : 0.16;
+      const targetAlpha = state.bossPhase === 3 ? 0.22 : state.bossPhase === 2 ? 0.14 : 0.08;
       this.bossVignette.alpha += (targetAlpha - this.bossVignette.alpha) * 0.05;
     } else {
       this.bossVignette.alpha += (0 - this.bossVignette.alpha) * 0.08;
@@ -222,10 +222,10 @@ export class EncounterLayer {
       if (isKing) {
         this.kingAura.visible = true;
         this.kingAura.clear();
-        const auraColor = state.bossPhase === 3 ? 0xb578ff : 0x7a52cc;
-        const auraAlpha = (0.18 + Math.sin(elapsed * 2.2) * 0.08) * (state.bossPhase === 3 ? 1.4 : 1);
+        const auraColor = state.bossPhase === 3 ? 0x3d7085 : 0x225163;
+        const auraAlpha = (0.12 + Math.sin(elapsed * 1.8) * 0.05) * (state.bossPhase === 3 ? 1.2 : 0.85);
         this.kingAura
-          .ellipse(this.sceneArtwork.position.x, this.sceneArtwork.position.y + 12, 120 * fishScale, 60 * fishScale)
+          .ellipse(this.sceneArtwork.position.x, this.sceneArtwork.position.y + 12, 110 * fishScale, 55 * fishScale)
           .fill({ color: auraColor, alpha: auraAlpha });
       } else {
         this.kingAura.visible = false;

@@ -5,15 +5,20 @@ export const SCENE_WIDTH = 1200;
 export const SCENE_HEIGHT = 800;
 
 export const ASSET_PATHS = {
-  background: '/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png',
-  foregroundLeft: '/theme_games/village-canal/foreground-left.png',
-  foregroundRight: '/theme_games/village-canal/foreground-right.png',
-  mistNear: '/theme_games/village-canal/mist-near.png',
-  waterMask: '/theme_games/village-canal/water-mask.png',
-  reflectionMask: '/theme_games/village-canal/reflection-mask.png',
+  backplate: '/theme_games/village-canal-v2/backplate.webp',
+  foregroundLeft: '/theme_games/village-canal-v2/foreground-left.webp',
+  foregroundRight: '/theme_games/village-canal-v2/foreground-right.webp',
+  waterMask: '/theme_games/village-canal-v2/water-mask.webp',
+  waterSource: '/theme_games/village-canal-v2/water-source.webp',
+  reflectionSource: '/theme_games/village-canal-v2/reflection-source.webp',
+  reflectionMask: '/theme_games/village-canal-v2/reflection-mask.webp',
+  displacementWater: '/theme_games/village-canal-v2/displacement-water.webp',
+  lanternGlow: '/theme_games/village-canal-v2/lantern-glow.webp',
+  mistFar: '/theme_games/village-canal-v2/mist-far.webp',
+  mistNear: '/theme_games/village-canal-v2/mist-near.webp',
 } as const;
 
-export const MOON_CENTER = { x: 401, y: 95 } as const;
+export const MOON_CENTER = { x: 484, y: 47 } as const;
 
 export type LanternSpot = {
   x: number;
@@ -24,14 +29,14 @@ export type LanternSpot = {
 };
 
 export const LANTERN_SPOTS: readonly LanternSpot[] = [
-  { x: 26, y: 288, radius: 26, phase: 0.1, intensity: 1.2 },    // Main left dock lantern
-  { x: 171, y: 33, radius: 18, phase: 1.4, intensity: 0.85 },   // Left house upper eave
-  { x: 128, y: 30, radius: 14, phase: 2.1, intensity: 0.7 },    // Left house roof
-  { x: 176, y: 244, radius: 20, phase: 3.5, intensity: 0.95 },  // Left house porch
-  { x: 599, y: 61, radius: 16, phase: 0.7, intensity: 0.8 },    // Right house upper
-  { x: 633, y: 118, radius: 18, phase: 2.8, intensity: 0.85 },  // Right house window
-  { x: 711, y: 9, radius: 12, phase: 4.2, intensity: 0.6 },     // Distant village right
-  { x: 366, y: 252, radius: 14, phase: 1.9, intensity: 0.7 },   // Arched bridge lantern
+  { x: 25, y: 281, radius: 26, phase: 0.1, intensity: 1.15 },   // Main left dock lantern
+  { x: 129, y: 26, radius: 14, phase: 1.4, intensity: 0.75 },   // Left house roof eave
+  { x: 177, y: 34, radius: 15, phase: 2.1, intensity: 0.8 },    // Left house upper eave
+  { x: 180, y: 242, radius: 18, phase: 3.5, intensity: 0.9 },   // Left house porch
+  { x: 366, y: 250, radius: 12, phase: 1.9, intensity: 0.7 },   // Arched bridge lantern
+  { x: 603, y: 52, radius: 16, phase: 0.7, intensity: 0.85 },   // Right stilt house upper
+  { x: 633, y: 119, radius: 15, phase: 2.8, intensity: 0.8 },   // Right house window
+  { x: 709, y: 12, radius: 10, phase: 4.2, intensity: 0.6 },    // Distant village right
 ];
 
 export type ArtworkProfile = {

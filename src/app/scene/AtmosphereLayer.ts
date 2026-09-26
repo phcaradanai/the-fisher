@@ -1,295 +1,214 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { LANTERN_SPOTS, MOON_CENTER, SCENE_HEIGHT, SCENE_WIDTH } from './scene-types';
 
-type FireflyData = {
+type FireflyParticle = {
   tier: 'far' | 'mid' | 'near';
   baseX: number;
   baseY: number;
   phase: number;
-  freqX: number;
-  freqY: number;
-  amplitudeX: number;
-  amplitudeY: number;
+  speedX: number;
+  speedY: number;
+  rangeX: number;
+  rangeY: number;
   color: number;
+  radius: number;
+  baseAlpha: number;
 };
 
 export class AtmosphereLayer {
-  public readonly farContainer = new Container();     // Behind bridge (depth 0.12)
-  public readonly midContainer = new Container();     // Water level (depth 0.38)
-  public readonly foregroundContainer = new Container(); // Near camera veil (depth 1.15)
+  // Independent depth containers matching virtual camera layers
+  public readonly farAtmosphere = new Container();     // Depth 0.04 (Sky, Moon, Distant Village)
+  public readonly midAtmosphere = new Container();     // Depth 0.40 (Midground Water, Bank, Reeds)
+  public readonly nearAtmosphere = new Container();    // Depth 1.15 (Foreground Dock, Reeds, Veil)
 
-  // Moon Halo and rays (attached to farContainer)
-  private readonly moonHalo = new Graphics();
-  private readonly lightRays = new Graphics();
+  // Moon Halo and Radiance
+  private readonly moonHaloSprite = new Sprite(Texture.EMPTY);
 
-  // Lantern Halos (attached to farContainer)
-  private readonly lanternHalos = new Graphics();
+  // Calibrated Lantern Glow Emitters
+  private readonly lanternGlowSprites: Sprite[] = [];
+  private readonly dockLanternGlow = new Sprite(Texture.EMPTY);
 
-  // Mist layers
-  private readonly farMist = new Graphics();
-  private readonly midMist = new Graphics();
-  private nearMistSprite: Sprite | null = null;
+  // Painterly Organic Mist Sprites (Zero geometric ellipses)
+  private readonly farMistSprite = new Sprite(Texture.EMPTY);
+  private readonly midMistSprite = new Sprite(Texture.EMPTY);
 
-  // Vegetation graphics (in mid and foreground)
-  private readonly foregroundReeds = new Graphics();
+  // Independent Tiered Fireflies
+  private readonly farFirefliesGraphics = new Graphics();
+  private readonly midFirefliesGraphics = new Graphics();
+  private readonly nearFirefliesGraphics = new Graphics();
 
-  // Firefly graphics
-  private readonly firefliesGraphics = new Graphics();
+  private readonly fireflies: FireflyParticle[] = [
+    // Far Tier (tiny, dim, slow, far parallax)
+    { tier: 'far', baseX: 350, baseY: 230, phase: 0.2, speedX: 0.25, speedY: 0.35, rangeX: 16, rangeY: 7, color: 0xc8f5d0, radius: 1.2, baseAlpha: 0.35 },
+    { tier: 'far', baseX: 540, baseY: 215, phase: 1.8, speedX: 0.30, speedY: 0.22, rangeX: 14, rangeY: 6, color: 0xffe6a3, radius: 1.1, baseAlpha: 0.40 },
+    { tier: 'far', baseX: 730, baseY: 225, phase: 3.1, speedX: 0.22, speedY: 0.30, rangeX: 18, rangeY: 8, color: 0xc8f5d0, radius: 1.3, baseAlpha: 0.32 },
+    { tier: 'far', baseX: 440, baseY: 260, phase: 4.5, speedX: 0.28, speedY: 0.38, rangeX: 15, rangeY: 7, color: 0xffe6a3, radius: 1.0, baseAlpha: 0.38 },
 
-  private readonly fireflies: FireflyData[] = [
-    // Far tier (small, dim, slow)
-    { tier: 'far', baseX: 340, baseY: 230, phase: 0.2, freqX: 0.3, freqY: 0.4, amplitudeX: 18, amplitudeY: 8, color: 0xc8f5d0 },
-    { tier: 'far', baseX: 540, baseY: 210, phase: 1.8, freqX: 0.35, freqY: 0.25, amplitudeX: 14, amplitudeY: 7, color: 0xffe6a3 },
-    { tier: 'far', baseX: 730, baseY: 220, phase: 3.1, freqX: 0.28, freqY: 0.38, amplitudeX: 20, amplitudeY: 9, color: 0xc8f5d0 },
-    { tier: 'far', baseX: 440, baseY: 260, phase: 4.5, freqX: 0.32, freqY: 0.42, amplitudeX: 16, amplitudeY: 8, color: 0xffe6a3 },
+    // Mid Tier (normal, warm green/amber, hovering near reeds and water)
+    { tier: 'mid', baseX: 320, baseY: 380, phase: 0.5, speedX: 0.45, speedY: 0.55, rangeX: 25, rangeY: 14, color: 0xa8ffd0, radius: 2.2, baseAlpha: 0.65 },
+    { tier: 'mid', baseX: 450, baseY: 480, phase: 2.1, speedX: 0.38, speedY: 0.48, rangeX: 30, rangeY: 16, color: 0xffdf7a, radius: 2.4, baseAlpha: 0.70 },
+    { tier: 'mid', baseX: 610, baseY: 420, phase: 3.7, speedX: 0.42, speedY: 0.58, rangeX: 28, rangeY: 15, color: 0xa8ffd0, radius: 2.0, baseAlpha: 0.60 },
+    { tier: 'mid', baseX: 760, baseY: 390, phase: 1.2, speedX: 0.50, speedY: 0.40, rangeX: 24, rangeY: 13, color: 0xffdf7a, radius: 2.3, baseAlpha: 0.65 },
+    { tier: 'mid', baseX: 890, baseY: 460, phase: 4.8, speedX: 0.35, speedY: 0.46, rangeX: 32, rangeY: 18, color: 0xa8ffd0, radius: 2.1, baseAlpha: 0.55 },
+    { tier: 'mid', baseX: 980, baseY: 530, phase: 2.9, speedX: 0.40, speedY: 0.54, rangeX: 26, rangeY: 15, color: 0xffdf7a, radius: 2.2, baseAlpha: 0.60 },
 
-    // Mid tier (standard, near reeds/stilt houses)
-    { tier: 'mid', baseX: 280, baseY: 380, phase: 0.5, freqX: 0.5, freqY: 0.6, amplitudeX: 28, amplitudeY: 15, color: 0xa8ffd0 },
-    { tier: 'mid', baseX: 420, baseY: 480, phase: 2.1, freqX: 0.42, freqY: 0.55, amplitudeX: 32, amplitudeY: 18, color: 0xffdf7a },
-    { tier: 'mid', baseX: 610, baseY: 420, phase: 3.7, freqX: 0.48, freqY: 0.65, amplitudeX: 30, amplitudeY: 16, color: 0xa8ffd0 },
-    { tier: 'mid', baseX: 760, baseY: 390, phase: 1.2, freqX: 0.55, freqY: 0.45, amplitudeX: 26, amplitudeY: 14, color: 0xffdf7a },
-    { tier: 'mid', baseX: 890, baseY: 460, phase: 4.8, freqX: 0.38, freqY: 0.52, amplitudeX: 34, amplitudeY: 20, color: 0xa8ffd0 },
-    { tier: 'mid', baseX: 990, baseY: 520, phase: 2.9, freqX: 0.45, freqY: 0.62, amplitudeX: 28, amplitudeY: 16, color: 0xffdf7a },
-
-    // Near tier (camera crossing firefly)
-    { tier: 'near', baseX: 520, baseY: 580, phase: 0.8, freqX: 0.22, freqY: 0.32, amplitudeX: 75, amplitudeY: 42, color: 0xfff0ad },
+    // Near Tier (rare, larger, soft bloom, camera pass)
+    { tier: 'near', baseX: 540, baseY: 580, phase: 0.8, speedX: 0.18, speedY: 0.28, rangeX: 65, rangeY: 36, color: 0xfff0ad, radius: 4.2, baseAlpha: 0.85 },
+    { tier: 'near', baseX: 880, baseY: 640, phase: 2.5, speedX: 0.15, speedY: 0.24, rangeX: 55, rangeY: 32, color: 0xd4ffdc, radius: 3.8, baseAlpha: 0.75 },
   ];
 
   constructor() {
-    // Setup Far container
-    this.farContainer.addChild(this.moonHalo, this.lightRays, this.lanternHalos, this.farMist);
+    // 1. Far Atmosphere Setup
+    this.moonHaloSprite.anchor.set(0.5);
+    this.moonHaloSprite.position.set(MOON_CENTER.x, MOON_CENTER.y);
+    this.moonHaloSprite.width = 300;
+    this.moonHaloSprite.height = 300;
+    this.moonHaloSprite.alpha = 0.14;
 
-    // Setup Mid container
-    this.midContainer.addChild(this.midMist, this.firefliesGraphics);
+    this.farMistSprite.width = SCENE_WIDTH;
+    this.farMistSprite.height = SCENE_HEIGHT;
+    this.farMistSprite.alpha = 0.28;
 
-    // Setup Foreground container
-    this.foregroundContainer.addChild(this.foregroundReeds);
-  }
+    this.farAtmosphere.addChild(
+      this.moonHaloSprite,
+      this.farMistSprite,
+      this.farFirefliesGraphics,
+    );
 
-  public setNearMistTexture(texture: Texture): void {
-    if (this.nearMistSprite) {
-      this.foregroundContainer.removeChild(this.nearMistSprite);
-      this.nearMistSprite.destroy();
-    }
-    const sprite = new Sprite(texture);
-    sprite.width = SCENE_WIDTH;
-    sprite.height = SCENE_HEIGHT;
-    sprite.alpha = 0.42;
-    this.nearMistSprite = sprite;
-    this.foregroundContainer.addChildAt(sprite, 0);
-  }
-
-  public update(_deltaSec: number, elapsed: number, reducedMotion: boolean, isObserving = false): void {
-    const motion = reducedMotion ? 0.1 : 1;
-
-    // 1. Living Moon Halo & Shafts
-    this.updateMoon(elapsed, motion);
-
-    // 2. Breathing Warm Lanterns
-    this.updateLanterns(elapsed, motion);
-
-    // 3. Multi-depth Spatial Mist
-    this.updateMist(elapsed, motion, isObserving);
-
-    // 4. Organic Vegetation Sway
-    this.updateVegetation(elapsed, motion);
-
-    // 5. 3-Tier Fireflies
-    this.updateFireflies(elapsed, motion, isObserving);
-  }
-
-  private updateMoon(elapsed: number, motion: number): void {
-    const g = this.moonHalo;
-    g.clear();
-
-    const mx = MOON_CENTER.x;
-    const my = MOON_CENTER.y;
-
-    // Slow breathing pulsation (period ~ 22s)
-    const breath = Math.sin(elapsed * 0.28 * motion) * 0.035;
-    const haloRadius = 118 + breath * 30;
-
-    // Inner bright moon halo
-    g.ellipse(mx, my, haloRadius, haloRadius)
-      .fill({ color: 0xd6f0e4, alpha: 0.08 + breath });
-
-    // Outer soft moon veil
-    g.ellipse(mx, my, haloRadius * 1.8, haloRadius * 1.8)
-      .fill({ color: 0xb0e8da, alpha: 0.035 + breath * 0.5 });
-
-    // Light rays angling softly across the canal
-    const r = this.lightRays;
-    r.clear();
-    const rayPulse = Math.sin(elapsed * 0.35 * motion) * 0.015;
-
-    r.moveTo(mx - 20, my + 30)
-      .lineTo(mx - 180, 480)
-      .lineTo(mx - 80, 480)
-      .closePath()
-      .fill({ color: 0xdfe5c0, alpha: (0.038 + rayPulse) * motion });
-
-    r.moveTo(mx + 10, my + 32)
-      .lineTo(mx + 40, 490)
-      .lineTo(mx + 130, 490)
-      .closePath()
-      .fill({ color: 0xf0dfb1, alpha: (0.032 + rayPulse * 0.8) * motion });
-  }
-
-  private updateLanterns(elapsed: number, motion: number): void {
-    const g = this.lanternHalos;
-    g.clear();
-
-    for (let i = 0; i < LANTERN_SPOTS.length; i += 1) {
+    // Initialize Far Background Lantern Glow Emitters (skip index 0 which is the foreground dock lantern)
+    for (let i = 1; i < LANTERN_SPOTS.length; i += 1) {
       const spot = LANTERN_SPOTS[i]!;
-      // Multi-frequency organic flicker
-      const flicker = Math.sin(elapsed * 3.4 * motion + spot.phase) * 0.07
-        + Math.sin(elapsed * 7.8 * motion + spot.phase * 1.9) * 0.035
-        + Math.cos(elapsed * 1.2 * motion) * 0.04;
+      const sprite = new Sprite(Texture.EMPTY);
+      sprite.anchor.set(0.5);
+      sprite.position.set(spot.x, spot.y);
+      sprite.width = spot.radius * 3.2;
+      sprite.height = spot.radius * 3.2;
+      sprite.alpha = spot.intensity * 0.45;
+      this.lanternGlowSprites.push(sprite);
+      this.farAtmosphere.addChild(sprite);
+    }
 
-      const alpha = Math.max(0, (0.24 + flicker) * spot.intensity);
-      const rad = spot.radius * (1 + flicker * 0.6);
+    // 2. Mid Atmosphere Setup
+    this.midMistSprite.width = SCENE_WIDTH;
+    this.midMistSprite.height = SCENE_HEIGHT;
+    this.midMistSprite.alpha = 0.35;
 
-      // Warm amber core
-      g.ellipse(spot.x, spot.y, rad * 0.55, rad * 0.55)
-        .fill({ color: 0xffea94, alpha: alpha * 1.4 });
+    this.midAtmosphere.addChild(
+      this.midMistSprite,
+      this.midFirefliesGraphics,
+    );
 
-      // Outer soft golden lantern radiance
-      g.ellipse(spot.x, spot.y, rad, rad)
-        .fill({ color: 0xffa028, alpha: alpha * 0.6 });
+    // 3. Near Atmosphere Setup
+    // Foreground Dock Lantern Optical Glow (calibrated to actual lantern at x=25, y=281)
+    const dockSpot = LANTERN_SPOTS[0]!;
+    this.dockLanternGlow.anchor.set(0.5);
+    this.dockLanternGlow.position.set(dockSpot.x, dockSpot.y);
+    this.dockLanternGlow.width = dockSpot.radius * 4.6;
+    this.dockLanternGlow.height = dockSpot.radius * 4.6;
+    this.dockLanternGlow.alpha = 0.52;
 
-      // Extended room bounce
-      g.ellipse(spot.x, spot.y, rad * 1.8, rad * 1.8)
-        .fill({ color: 0xff8818, alpha: alpha * 0.18 });
+    this.nearAtmosphere.addChild(
+      this.dockLanternGlow,
+      this.nearFirefliesGraphics,
+    );
+  }
+
+  public setTextures(textures: {
+    lanternGlow: Texture;
+    mistFar: Texture;
+    mistNear: Texture;
+  }): void {
+    this.moonHaloSprite.texture = textures.lanternGlow;
+    this.farMistSprite.texture = textures.mistFar;
+    this.midMistSprite.texture = textures.mistNear;
+    this.dockLanternGlow.texture = textures.lanternGlow;
+
+    for (let i = 0; i < this.lanternGlowSprites.length; i += 1) {
+      this.lanternGlowSprites[i]!.texture = textures.lanternGlow;
     }
   }
 
-  private updateMist(elapsed: number, motion: number, isObserving: boolean): void {
-    // Far Mist behind bridge (depth 0.12): very slow horizontal drift
-    const fg = this.farMist;
+  public update(deltaSec: number, elapsed: number, reducedMotion: boolean, isObserving = false): void {
+    const motion = reducedMotion ? 0.1 : 1.0;
+
+    // 1. Living Moon Halo (Slow, majestic breathing pulsation, period ~24s)
+    const moonBreath = Math.sin(elapsed * 0.26 * motion) * 0.035;
+    this.moonHaloSprite.alpha = (0.13 + moonBreath) * (isObserving ? 0.6 : 1.0);
+    this.moonHaloSprite.scale.set(1.0 + moonBreath * 0.4);
+
+    // 2. Optical Lantern Light Breathing (Subtle multi-frequency organic shimmer)
+    // Dock lantern:
+    const dockFlicker = Math.sin(elapsed * 3.2 * motion) * 0.04
+      + Math.sin(elapsed * 7.1 * motion) * 0.02
+      + Math.cos(elapsed * 1.5 * motion) * 0.025;
+    this.dockLanternGlow.alpha = Math.max(0.2, (0.50 + dockFlicker));
+
+    // Background lanterns:
+    for (let i = 0; i < this.lanternGlowSprites.length; i += 1) {
+      const spot = LANTERN_SPOTS[i + 1]!;
+      const sprite = this.lanternGlowSprites[i]!;
+      const flicker = Math.sin(elapsed * 3.5 * motion + spot.phase) * 0.04
+        + Math.sin(elapsed * 8.2 * motion + spot.phase * 1.7) * 0.02;
+      sprite.alpha = Math.max(0.15, (spot.intensity * 0.42 + flicker));
+    }
+
+    // 3. Multi-Layer Organic Mist Drift (Gentle continuous horizontal motion)
+    const farDrift = Math.sin(elapsed * 0.12 * motion) * 20;
+    this.farMistSprite.position.x = farDrift;
+    this.farMistSprite.alpha = (isObserving ? 0.18 : 0.28) + Math.sin(elapsed * 0.22 * motion) * 0.04;
+
+    const midDrift = Math.sin(elapsed * 0.16 * motion + 1.2) * 28;
+    this.midMistSprite.position.x = midDrift;
+    this.midMistSprite.alpha = (isObserving ? 0.22 : 0.35) + Math.sin(elapsed * 0.29 * motion) * 0.05;
+
+    // 4. Update 3-Tier Fireflies (Each drawn into its own independent depth container)
+    this.updateFireflies(deltaSec, elapsed, motion, isObserving);
+  }
+
+  private updateFireflies(_deltaSec: number, elapsed: number, motion: number, isObserving: boolean): void {
+    const fg = this.farFirefliesGraphics;
+    const mg = this.midFirefliesGraphics;
+    const ng = this.nearFirefliesGraphics;
+
     fg.clear();
-    const farDriftX = ((elapsed * 4 * motion) % 300) - 150;
-    const farAlpha = (isObserving ? 0.03 : 0.055) + Math.sin(elapsed * 0.25 * motion) * 0.015;
-
-    fg.ellipse(400 + Math.sin(elapsed * 0.15 * motion) * 25 + farDriftX * 0.2, 205, 260, 22)
-      .fill({ color: 0xd8e4d2, alpha: farAlpha });
-    fg.ellipse(680 + Math.sin(elapsed * 0.18 * motion + 1) * 30 + farDriftX * 0.25, 218, 220, 20)
-      .fill({ color: 0xcde0d8, alpha: farAlpha * 0.85 });
-
-    // Mid Mist over water (depth 0.38): drifts across canal surface
-    const mg = this.midMist;
     mg.clear();
-    const midAlpha = (isObserving ? 0.025 : 0.05) + Math.sin(elapsed * 0.38 * motion + 0.5) * 0.018;
+    ng.clear();
 
-    mg.ellipse(360 + Math.sin(elapsed * 0.22 * motion) * 45, 340, 290, 32)
-      .fill({ color: 0xd8e8de, alpha: midAlpha });
-    mg.ellipse(680 + Math.cos(elapsed * 0.26 * motion + 1.2) * 55, 365, 340, 35)
-      .fill({ color: 0xc4e2da, alpha: midAlpha * 0.9 });
-    mg.ellipse(920 + Math.sin(elapsed * 0.2 * motion + 2.4) * 40, 325, 240, 26)
-      .fill({ color: 0xdae2d0, alpha: midAlpha * 0.75 });
-
-    // Near camera mist sprite
-    if (this.nearMistSprite) {
-      this.nearMistSprite.position.x = Math.sin(elapsed * 0.16 * motion) * 22;
-      this.nearMistSprite.alpha = (isObserving ? 0.22 : 0.38) + Math.sin(elapsed * 0.31 * motion) * 0.08;
-    }
-  }
-
-  private updateVegetation(elapsed: number, motion: number): void {
-    const g = this.foregroundReeds;
-    g.clear();
-
-    // Wind gust modulation: slow natural gust cycles (period ~ 8s)
-    const windGust = Math.sin(elapsed * 0.42 * motion) * 0.6 + Math.sin(elapsed * 0.85 * motion) * 0.4;
-
-    // 12 Foreground reeds anchored at bottom right with individual phase offsets
-    for (let i = 0; i < 12; i += 1) {
-      const rx = 1010 + i * 16;
-      const ry = SCENE_HEIGHT;
-      const reedHeight = 110 + (i % 4) * 24;
-      const reedWidth = 3.2 - (i % 3) * 0.4;
-
-      // Unique phase per blade
-      const bladePhase = i * 0.73;
-      const bladeFreq = 0.9 + (i % 3) * 0.25;
-      const bladeSway = (Math.sin(elapsed * bladeFreq * motion + bladePhase) * 12 + windGust * 10) * motion;
-
-      const midX = rx + bladeSway * 0.4;
-      const midY = ry - reedHeight * 0.55;
-      const tipX = rx + bladeSway;
-      const tipY = ry - reedHeight;
-
-      g.moveTo(rx, ry)
-        .quadraticCurveTo(midX, midY, tipX, tipY)
-        .stroke({
-          color: i % 2 === 0 ? 0x072228 : 0x092d34,
-          width: reedWidth,
-          alpha: 0.88,
-        });
-
-      // Hanging reed leaves
-      if (i % 3 === 0) {
-        g.moveTo(midX, midY)
-          .quadraticCurveTo(midX - 14, midY - 6, midX - 22 + bladeSway * 0.2, midY + 12)
-          .stroke({
-            color: 0x0a333a,
-            width: 1.8,
-            alpha: 0.75,
-          });
-      }
-    }
-
-    // Left dock moss/ferns hanging down
-    for (let i = 0; i < 6; i += 1) {
-      const lx = 40 + i * 28;
-      const ly = 320;
-      const len = 35 + (i % 3) * 14;
-      const sway = Math.sin(elapsed * 1.1 * motion + i * 0.9) * 4 * motion;
-
-      g.moveTo(lx, ly)
-        .quadraticCurveTo(lx + sway * 0.5, ly + len * 0.6, lx + sway, ly + len)
-        .stroke({
-          color: 0x09292e,
-          width: 2.2,
-          alpha: 0.7,
-        });
-    }
-  }
-
-  private updateFireflies(elapsed: number, motion: number, isObserving: boolean): void {
-    const g = this.firefliesGraphics;
-    g.clear();
+    const obsDim = isObserving ? 0.5 : 1.0;
 
     for (let i = 0; i < this.fireflies.length; i += 1) {
       const f = this.fireflies[i]!;
 
-      // 3D trajectory calculation
-      const xOffset = Math.sin(elapsed * f.freqX * motion + f.phase) * f.amplitudeX;
-      const yOffset = Math.cos(elapsed * f.freqY * motion + f.phase * 1.3) * f.amplitudeY;
-      const curX = f.baseX + xOffset * motion;
-      const curY = f.baseY + yOffset * motion;
+      // Organic flight trajectory combining two asynchronous sine waves
+      const curX = f.baseX + Math.sin(elapsed * f.speedX * motion + f.phase) * f.rangeX
+        + Math.cos(elapsed * f.speedX * 0.5 * motion) * (f.rangeX * 0.3);
+      const curY = f.baseY + Math.cos(elapsed * f.speedY * motion + f.phase) * f.rangeY
+        + Math.sin(elapsed * f.speedY * 0.4 * motion) * (f.rangeY * 0.25);
 
-      // Pulse brightness
-      const pulse = Math.sin(elapsed * 2.2 * motion + f.phase * 2.5) * 0.5 + 0.5;
-      const baseAlpha = f.tier === 'far' ? 0.35 : f.tier === 'mid' ? 0.75 : 0.88;
-      const alpha = isObserving ? baseAlpha * 0.4 : baseAlpha * (0.35 + pulse * 0.65);
+      // Gentle brightness pulsing
+      const pulse = Math.sin(elapsed * 2.4 * motion + f.phase * 3.1) * 0.25
+        + Math.sin(elapsed * 4.8 * motion + f.phase) * 0.15;
+      const alpha = Math.max(0.08, (f.baseAlpha + pulse) * obsDim);
 
       if (f.tier === 'far') {
-        g.circle(curX, curY, 1.4)
-          .fill({ color: f.color, alpha });
+        fg.circle(curX, curY, f.radius).fill({ color: f.color, alpha });
       } else if (f.tier === 'mid') {
         // Core
-        g.circle(curX, curY, 2.2)
-          .fill({ color: f.color, alpha });
+        mg.circle(curX, curY, f.radius).fill({ color: f.color, alpha });
         // Soft aura
-        g.circle(curX, curY, 5.5)
-          .fill({ color: f.color, alpha: alpha * 0.28 });
+        mg.circle(curX, curY, f.radius * 2.2).fill({ color: f.color, alpha: alpha * 0.25 });
       } else {
-        // Near camera firefly: large and soft
-        g.circle(curX, curY, 3.8)
-          .fill({ color: f.color, alpha: alpha * 0.95 });
-        g.circle(curX, curY, 11)
-          .fill({ color: f.color, alpha: alpha * 0.22 });
+        // Near firefly with soft luminous halo
+        ng.circle(curX, curY, f.radius * 3.2).fill({ color: f.color, alpha: alpha * 0.18 });
+        ng.circle(curX, curY, f.radius * 1.8).fill({ color: f.color, alpha: alpha * 0.45 });
+        ng.circle(curX, curY, f.radius).fill({ color: 0xffffff, alpha: alpha * 0.9 });
       }
     }
+  }
+
+  public destroy(): void {
+    this.farAtmosphere.destroy({ children: true });
+    this.midAtmosphere.destroy({ children: true });
+    this.nearAtmosphere.destroy({ children: true });
   }
 }
