@@ -90,7 +90,7 @@ function TacticCards({
 }) {
   return (
     <div className="game-command-bar fight-actions" role="group" aria-label={copy.fight} data-control-surface="tactical-actions">
-      {FIGHT_ACTIONS.map((action) => {
+      {FIGHT_ACTIONS.map((action, index) => {
         const preview = session && fishProfile
           ? previewTurnFishingAction(session, action, fishProfile, gearStats)
           : null;
@@ -113,6 +113,7 @@ function TacticCards({
             title={`${copy.actionHint[action]} ${preview?.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
             data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
           >
+            <span className="action-shortcut" aria-hidden="true">{index + 1}</span>
             <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
             <span className="action-card__head">
               <img className="action-icon" src={`/theme_games/action-icon-${action}.webp`} alt="" />
@@ -308,7 +309,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
   }, [act, inDuel, presentationBusy, session]);
 
   return (
-    <div className="fishing-layout">
+    <div
+      className="fishing-layout"
+      data-phase={phase}
+      data-presentation-event={activeEvent?.type ?? 'IDLE'}
+      data-intent={displayedIntent ?? 'none'}
+      data-rarity={fish?.rarity ?? 'none'}
+      data-boss-phase={session?.bossPhase ?? 0}
+    >
       <div className="spot-gallery" role="group" aria-label={copy.chooseSpot}>
         {FISHING_SPOTS.map((spot) => {
           const unlocked = unlockedSpotIds.includes(spot.id);
@@ -350,7 +358,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           </label>
         </div>
 
-        <div className="scene-frame" data-phase={phase}>
+        <div
+          className="scene-frame"
+          data-phase={phase}
+          data-presentation-event={activeEvent?.type ?? 'IDLE'}
+          data-intent={displayedIntent ?? 'none'}
+          data-rarity={fish?.rarity ?? 'none'}
+          data-boss-phase={session?.bossPhase ?? 0}
+        >
           <CanalScene
             artwork={encounterVisible ? fish?.artwork ?? null : null}
             description={`${copy.phase[phase]}. ${localize(selectedSpot.description, locale)}`}
@@ -369,6 +384,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             showEncounter={encounterVisible}
             fishId={encounterVisible ? fish?.id ?? null : null}
           />
+          <div className="scene-cinematic-chrome" aria-hidden="true">
+            <span className="scene-cinematic-chrome__corner scene-cinematic-chrome__corner--tl" />
+            <span className="scene-cinematic-chrome__corner scene-cinematic-chrome__corner--tr" />
+            <span className="scene-cinematic-chrome__corner scene-cinematic-chrome__corner--bl" />
+            <span className="scene-cinematic-chrome__corner scene-cinematic-chrome__corner--br" />
+            <span className="scene-cinematic-chrome__horizon" />
+            <span className="scene-cinematic-chrome__focus" />
+          </div>
           <aside className="scene-intel" aria-label={copy.area}>
             <h3>{copy.area}</h3>
             <p>{localize(selectedSpot.description, locale)}</p>
