@@ -108,16 +108,16 @@ function TacticCards({
             key={action}
             onClick={() => onAction(action)}
             disabled={!session || !fishProfile || session.ap < 1 || presentationBusy}
-            aria-keyshortcuts={action === 'reel' ? '1' : action === 'pull' ? '2' : action === 'release' ? '3' : action === 'brace' ? '4' : '5'}
+            aria-keyshortcuts={String(index + 1)}
             aria-label={`${copy[action]}. 1 ${copy.actionPoints}. ${matchup}. ${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
-            title={`${copy.actionHint[action]} ${preview?.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
-            data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
+            title={`${copy.actionHint[action]}${preview?.modeReason ? ` · ${copy.modeReason[preview.modeReason]}` : ''}`}
+            data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` · ${copy.modeReason[preview.modeReason]}` : ''}`}
           >
             <span className="action-shortcut" aria-hidden="true">{index + 1}</span>
             <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
             <span className="action-card__head">
               <img className="action-icon" src={`/theme_games/action-icon-${action}.webp`} alt="" />
-              <span className="action-card__cost"><strong>1</strong><span>{copy.actionPoints}</span></span>
+              <span className="action-card__cost"><strong>1</strong><span>AP</span></span>
             </span>
             <span className="action-button__top">
               <strong>{copy[action]}</strong>
@@ -127,10 +127,6 @@ function TacticCards({
                 </span>
               )}
             </span>
-            <span className="action-button__hint" data-detail="secondary">{copy.actionHint[action]}</span>
-            {preview?.modeReason && (
-              <span className="action-button__reason" data-detail="secondary">{copy.modeReason[preview.modeReason]}</span>
-            )}
           </button>
         );
       })}
@@ -147,29 +143,36 @@ function CombatVitals({
   locale: Locale;
   session: TurnFishingSession;
 }) {
+  const staminaPercent = Math.max(0, Math.min(100, Math.round((session.stamina / Math.max(1, session.maxStamina)) * 100)));
+  const tensionPercent = Math.max(0, Math.min(100, Math.round(session.tension)));
+  const distancePercent = Math.max(0, Math.min(100, Math.round((session.distance / Math.max(1, session.maxDistance)) * 100)));
+
   const metrics = [
     {
       key: 'stamina',
       label: locale === 'th' ? 'พลังปลา' : 'Fish stamina',
       value: session.stamina,
       max: session.maxStamina,
+      percent: staminaPercent,
       display: `${numberText(session.stamina, locale)} / ${numberText(session.maxStamina, locale)}`,
-      tone: 'stamina',
+      tone: staminaPercent <= 25 ? 'stamina-critical' : staminaPercent <= 50 ? 'stamina-low' : 'stamina',
     },
     {
       key: 'tension',
       label: locale === 'th' ? 'แรงตึงสาย' : 'Line tension',
       value: session.tension,
       max: 100,
+      percent: tensionPercent,
       display: `${numberText(session.tension, locale)}%`,
-      tone: 'tension',
+      tone: tensionPercent >= 85 ? 'tension-danger' : tensionPercent >= 70 ? 'tension-warn' : 'tension',
     },
     {
       key: 'distance',
       label: locale === 'th' ? 'ระยะจากฝั่ง' : 'Distance',
       value: session.distance,
       max: session.maxDistance,
-      display: `${numberText(session.distance, locale)} / ${numberText(session.maxDistance, locale)}`,
+      percent: distancePercent,
+      display: `${numberText(session.distance, locale)} / ${numberText(session.maxDistance, locale)} m`,
       tone: 'distance',
     },
   ] as const;
@@ -180,8 +183,9 @@ function CombatVitals({
       label: locale === 'th' ? 'ความทนสาย' : 'Line durability',
       value: session.lineDurability,
       max: session.maxLineDurability,
+      percent: Math.round((session.lineDurability / Math.max(1, session.maxLineDurability)) * 100),
       display: `${numberText(session.lineDurability, locale)} / ${numberText(session.maxLineDurability, locale)}`,
-      tone: 'line',
+      tone: 'line-danger',
     }]
     : metrics;
 
@@ -189,16 +193,29 @@ function CombatVitals({
     <section className="combat-vitals" data-control-surface="combat-vitals" aria-label={copy.fight}>
       <div className="combat-vitals__metrics">
         {visibleMetrics.map((metric) => (
-          <div className={`combat-vital combat-vital--${metric.tone}`} key={metric.key} data-vital={metric.key}>
+          <div
+            className={`combat-vital combat-vital--${metric.tone}`}
+            key={metric.key}
+            data-vital={metric.key}
+            data-percent={metric.percent}
+          >
             <div className="combat-vital__heading">
               <span>{metric.label}</span>
               <strong>{metric.display}</strong>
             </div>
-            <progress
-              value={metric.value}
-              max={metric.max}
-              aria-label={metric.label}
-            />
+            <div className="combat-vital__bar-wrap">
+              <progress
+                value={metric.value}
+                max={metric.max}
+                aria-label={metric.label}
+              />
+              {metric.key === 'tension' && (
+                <div className="tension-gauge-markers" aria-hidden="true">
+                  <span className="tension-marker tension-marker--sweet" title="Sweet Spot" />
+                  <span className="tension-marker tension-marker--danger" title="Danger Zone" />
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -320,6 +337,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
       <div className="spot-gallery" role="group" aria-label={copy.chooseSpot}>
         {FISHING_SPOTS.map((spot) => {
           const unlocked = unlockedSpotIds.includes(spot.id);
+          const stars = Math.ceil(spot.risk * 5);
           return (
             <button
               className={`spot-gallery__item${spot.id === selectedSpotId ? ' is-current' : ''}`}
@@ -330,7 +348,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               onClick={() => selectSpot(spot.id)}
             >
               <img src={`/theme_games/spot-${spot.id}.webp`} alt="" />
-              <span>{localize(spot.name, locale)}{!unlocked && ` · ${copy.locked}`}</span>
+              <div className="spot-gallery__info">
+                <span className="spot-gallery__name">{localize(spot.name, locale)}{!unlocked && ` · ${copy.locked}`}</span>
+                {unlocked && (
+                  <span className="spot-gallery__risk" aria-hidden="true">
+                    {'★'.repeat(stars)}
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
@@ -341,7 +366,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             <h2 id="field-title">{localize(selectedSpot.name, locale)}</h2>
             <p>{localize(selectedSpot.description, locale)}</p>
           </div>
-          <label className="spot-picker">
+          <label className="spot-picker visually-hidden">
             <span>{copy.chooseSpot}</span>
             <select
               aria-label={copy.chooseSpot}
@@ -419,15 +444,22 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             {session && fish && !castingPresentation ? (
               <>
                 <div className="scene-callout__meta">
-                  <span>{copy.rarity[fish.rarity]}</span>
-                  {session.bossPhase && <span>{copy.bossPhase[session.bossPhase]}</span>}
+                  <span className={`scene-callout__rarity-pill scene-callout__rarity-pill--${fish.rarity}`}>{copy.rarity[fish.rarity]}</span>
+                  {session.bossPhase && <span className="scene-callout__boss-phase">{copy.bossPhase[session.bossPhase]}</span>}
                 </div>
                 <h3>{localize(fish.name, locale)}</h3>
                 {displayedIntent && (
                   <div className={`scene-callout__intent${activeEvent?.type === 'PLAYER_ACTION_RESOLVED' && activeEvent.action === 'observe' ? ' is-focused' : ''}`} data-intent={displayedIntent}>
-                    <strong>{copy.intentName[displayedIntent]}</strong>
-                    <span>{copy.intentHint[displayedIntent]}</span>
-                    {intentCounter && <span className="scene-callout__counter">{copy[intentCounter]}</span>}
+                    <div className="intent-header-row">
+                      <span className="intent-indicator-dot" aria-hidden="true" />
+                      <strong>{copy.intentName[displayedIntent]}</strong>
+                    </div>
+                    <span className="intent-description">{copy.intentHint[displayedIntent]}</span>
+                    {intentCounter && (
+                      <span className="scene-callout__counter">
+                        <span className="counter-tag">{locale === 'th' ? 'แก้ทาง:' : 'Counter:'}</span> <strong>{copy[intentCounter]}</strong>
+                      </span>
+                    )}
                   </div>
                 )}
               </>
@@ -447,11 +479,20 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           )}
           {inDuel && session && (
             <div className="turn-counter liquid-pane liquid-pane--hud" aria-label={`${copy.turn} ${displayedTurn}, ${copy.actionPoints} ${displayedAp} / ${session.maxAp}`}>
-              <span>{copy.turn} <strong>{numberText(displayedTurn, locale)}</strong></span>
-              <span className="turn-counter__ap">
-                <span>{copy.actionPoints}</span>
-                <strong>{numberText(displayedAp, locale)} / {numberText(session.maxAp, locale)}</strong>
-              </span>
+              <div className="turn-counter__turn">
+                <span>{copy.turn}</span>
+                <strong>{numberText(displayedTurn, locale)}</strong>
+              </div>
+              <div className="turn-counter__ap">
+                <div className="ap-crystals" aria-label={`${copy.actionPoints} ${displayedAp}/${session.maxAp}`} aria-hidden="true">
+                  {Array.from({ length: session.maxAp }, (_, i) => (
+                    <span key={i} className={`ap-crystal${i < displayedAp ? ' is-active' : ' is-spent'}`} />
+                  ))}
+                </div>
+                <span className="ap-count-text">
+                  <strong>{numberText(displayedAp, locale)}</strong>/{numberText(session.maxAp, locale)} <span>AP</span>
+                </span>
+              </div>
             </div>
           )}
           <span className="scene-location liquid-pane liquid-pane--pill">{localize(selectedSpot.name, locale)}</span>
@@ -546,60 +587,66 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               <button className="action-button action-button--cast liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={restartSession}>{copy.tryAgain}</button>
             </div>
           )}
-          {!presentationBusy && phase === 'caught' && result && fish && (
-            <section
-              className={`catch-reveal catch-reveal--${fish.rarity} liquid-pane liquid-pane--reveal`}
-              aria-labelledby="catch-title"
-            >
-              <div className="catch-reveal__hero">
-                <FishArtworkImage fish={fish} locale={locale} className="catch-reveal__artwork" loading="eager" />
-                <div className="catch-reveal__headline liquid-pane liquid-pane--readout">
-                  <div className="catch-reveal__eyebrow">
-                    <span>{copy.caught}</span>
-                    {firstCatch && <span className="catch-reveal__badge">{copy.firstCatch}</span>}
+          {!presentationBusy && phase === 'caught' && result && fish && (() => {
+            const isNewBest = !firstCatch && (result.weightKg > catchBestWeight || result.lengthCm > catchBestLength);
+            return (
+              <section
+                className={`catch-reveal catch-reveal--${fish.rarity} liquid-pane liquid-pane--reveal`}
+                data-rarity={fish.rarity}
+                aria-labelledby="catch-title"
+              >
+                <div className="catch-reveal__hero">
+                  <div className="catch-reveal__artwork-halo" aria-hidden="true" />
+                  <FishArtworkImage fish={fish} locale={locale} className="catch-reveal__artwork" loading="eager" />
+                  <div className="catch-reveal__headline liquid-pane liquid-pane--readout">
+                    <div className="catch-reveal__eyebrow">
+                      <span className="catch-reveal__success-badge">{copy.caught}</span>
+                      {firstCatch && <span className="catch-reveal__badge catch-reveal__badge--first">{copy.firstCatch}</span>}
+                      {isNewBest && <span className="catch-reveal__badge catch-reveal__badge--record">{locale === 'th' ? 'สถิติใหม่!' : 'New Record!'}</span>}
+                    </div>
+                    <h3 id="catch-title">{localize(fish.name, locale)}</h3>
+                    <p className="catch-reveal__rarity">{copy.rarity[fish.rarity]}</p>
+                    <p className="catch-reveal__discovery"><span>{copy.discovery}</span> {localize(fish.collection.entry, locale)}</p>
                   </div>
-                  <h3 id="catch-title">{localize(fish.name, locale)}</h3>
-                  <p className="catch-reveal__rarity">{copy.rarity[fish.rarity]}</p>
-                  <p className="catch-reveal__discovery"><span>{copy.discovery}</span> {localize(fish.collection.entry, locale)}</p>
                 </div>
-              </div>
 
-              <div className="catch-reveal__details">
-                <dl className="catch-reveal__measurements">
-                  <div><dt>{copy.length}</dt><dd>{numberText(result.lengthCm, locale)} <span>cm</span></dd></div>
-                  <div><dt>{copy.weight}</dt><dd>{weightText(result.weightKg, locale)} <span>kg</span></dd></div>
-                </dl>
-                <div className="catch-reveal__record">
-                  <span>{copy.record}</span>
-                  <strong>{weightText(catchBestWeight, locale)} kg · {numberText(catchBestLength, locale)} cm</strong>
+                <div className="catch-reveal__details">
+                  <dl className="catch-reveal__measurements">
+                    <div><dt>{copy.length}</dt><dd>{numberText(result.lengthCm, locale)} <span>cm</span></dd></div>
+                    <div><dt>{copy.weight}</dt><dd>{weightText(result.weightKg, locale)} <span>kg</span></dd></div>
+                  </dl>
+                  <div className="catch-reveal__record">
+                    <span>{copy.record}</span>
+                    <strong>{weightText(Math.max(catchBestWeight, result.weightKg), locale)} kg · {numberText(Math.max(catchBestLength, result.lengthCm), locale)} cm</strong>
+                  </div>
                 </div>
-              </div>
 
-              <div className="catch-reveal__progress" aria-label={`${copy.reward}, ${copy.collectionProgress}`}>
-                <div>
-                  <span>{copy.reward}</span>
-                  <strong>+{numberText(fish.rewards.reputation, locale)} {copy.earnedReputation}</strong>
+                <div className="catch-reveal__progress" aria-label={`${copy.reward}, ${copy.collectionProgress}`}>
+                  <div>
+                    <span>{copy.reward}</span>
+                    <strong>+{numberText(fish.rewards.reputation, locale)} {copy.earnedReputation}</strong>
+                  </div>
+                  <div>
+                    <span>{copy.knowledgeProgress}</span>
+                    <strong>{numberText(catchKnowledgeLevel, locale)} / 3</strong>
+                  </div>
+                  <div>
+                    <span>{copy.collectionProgress}</span>
+                    <strong>{numberText(discoveredFishCount, locale)} / {numberText(FISH.length, locale)}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>{copy.knowledgeProgress}</span>
-                  <strong>{numberText(catchKnowledgeLevel, locale)} / 3</strong>
-                </div>
-                <div>
-                  <span>{copy.collectionProgress}</span>
-                  <strong>{numberText(discoveredFishCount, locale)} / {numberText(FISH.length, locale)}</strong>
-                </div>
-              </div>
 
-              <div className="catch-reveal__actions">
-                <button className="action-button action-button--sell liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={() => settleCatch('sell')}>
-                  {copy.sellReward}: {numberText(fish.sellValue, locale)} {copy.coins}
-                </button>
-                <button className="action-button action-button--keep liquid-pane liquid-pane--interactive" onClick={() => settleCatch('keep')}>
-                  {copy.keep}
-                </button>
-              </div>
-            </section>
-          )}
+                <div className="catch-reveal__actions">
+                  <button className="action-button action-button--sell liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={() => settleCatch('sell')}>
+                    {copy.sellReward}: {numberText(fish.sellValue, locale)} {copy.coins}
+                  </button>
+                  <button className="action-button action-button--keep liquid-pane liquid-pane--interactive" onClick={() => settleCatch('keep')}>
+                    {copy.keep}
+                  </button>
+                </div>
+              </section>
+            );
+          })()}
         </section>}
       </section>
 
