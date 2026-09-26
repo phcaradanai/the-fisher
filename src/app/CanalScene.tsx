@@ -2,6 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Rarity } from '../content/types';
 import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
+import { assetUrl } from './asset';
+import {
+  ASSET_PATHS,
+  getArtworkProfile,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type ArtworkProfile,
+  type SceneRenderState,
+} from './scene/scene-types';
+import { ParallaxRig } from './scene/ParallaxRig';
+import { WaterSurface } from './scene/WaterSurface';
+import { AtmosphereLayer } from './scene/AtmosphereLayer';
+import { EncounterLayer } from './scene/EncounterLayer';
 
 type CanalSceneProps = {
   artwork: string | null;
@@ -218,13 +231,19 @@ export function CanalScene({
 }: CanalSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const backgroundSpriteRef = useRef<Sprite | null>(null);
-  const artworkSpriteRef = useRef<Sprite | null>(null);
+  const foregroundLeftSpriteRef = useRef<Sprite | null>(null);
+  const foregroundRightSpriteRef = useRef<Sprite | null>(null);
+  const encounterLayerRef = useRef<EncounterLayer | null>(null);
+  const waterSurfaceRef = useRef<WaterSurface | null>(null);
+  const atmosphereLayerRef = useRef<AtmosphereLayer | null>(null);
+  const parallaxRigRef = useRef<ParallaxRig>(new ParallaxRig());
+
   const backgroundRequestRef = useRef(0);
   const artworkRequestRef = useRef(0);
   const artworkScaleRef = useRef(1);
-  const artworkProfileRef = useRef<ArtworkProfile>(DEFAULT_ARTWORK_PROFILE);
-  const artworkMaskTextureRef = useRef<Texture | null>(null);
-  const sceneState = useRef({
+  const artworkProfileRef = useRef<ArtworkProfile>(getArtworkProfile(fishId, fishRarity));
+
+  const sceneState = useRef<SceneRenderState>({
     artwork,
     fishId,
     event,
@@ -239,46 +258,78 @@ export function CanalScene({
     reducedMotion,
     showEncounter,
   });
+
   const [sceneError, setSceneError] = useState(false);
 
-  const loadBackground = useCallback(() => {
-    const sprite = backgroundSpriteRef.current;
-    if (!sprite) return;
+  const loadBackgroundAndLayers = useCallback(() => {
+    const bgSprite = backgroundSpriteRef.current;
+    if (!bgSprite) return;
 
     const request = ++backgroundRequestRef.current;
-    sprite.visible = false;
-    sprite.texture = Texture.EMPTY;
+    bgSprite.visible = false;
+    bgSprite.texture = Texture.EMPTY;
 
-    void Assets.load<Texture>(VILLAGE_CANAL_BACKGROUND).then((texture) => {
-      if (request !== backgroundRequestRef.current || backgroundSpriteRef.current !== sprite) return;
-      sprite.texture = texture;
-      coverSprite(sprite, texture);
-      sprite.visible = true;
+    // Load base background
+    void Assets.load<Texture>(assetUrl(ASSET_PATHS.background)).then((texture) => {
+      if (request !== backgroundRequestRef.current || backgroundSpriteRef.current !== bgSprite) return;
+      bgSprite.texture = texture;
+      coverSprite(bgSprite, texture);
+      bgSprite.visible = true;
     }).catch(() => {
-      if (request === backgroundRequestRef.current && backgroundSpriteRef.current === sprite) {
-        sprite.texture = Texture.EMPTY;
+      if (request === backgroundRequestRef.current && backgroundSpriteRef.current === bgSprite) {
+        bgSprite.texture = Texture.EMPTY;
       }
+    });
+
+    // Load foreground left cutout
+    void Assets.load<Texture>(assetUrl(ASSET_PATHS.foregroundLeft)).then((texture) => {
+      const fgLeft = foregroundLeftSpriteRef.current;
+      if (!fgLeft) return;
+      fgLeft.texture = texture;
+      coverSprite(fgLeft, texture);
+      fgLeft.visible = true;
+    }).catch(() => {
+      if (foregroundLeftSpriteRef.current) foregroundLeftSpriteRef.current.visible = false;
+    });
+
+    // Load foreground right cutout
+    void Assets.load<Texture>(assetUrl(ASSET_PATHS.foregroundRight)).then((texture) => {
+      const fgRight = foregroundRightSpriteRef.current;
+      if (!fgRight) return;
+      fgRight.texture = texture;
+      coverSprite(fgRight, texture);
+      fgRight.visible = true;
+    }).catch(() => {
+      if (foregroundRightSpriteRef.current) foregroundRightSpriteRef.current.visible = false;
+    });
+
+    // Load near mist
+    void Assets.load<Texture>(assetUrl(ASSET_PATHS.mistNear)).then((texture) => {
+      atmosphereLayerRef.current?.setNearMistTexture(texture);
+    }).catch(() => {
+      // Fallback procedural mist handles it
     });
   }, []);
 
   const loadArtwork = useCallback((path: string | null) => {
-    const sprite = artworkSpriteRef.current;
-    if (!sprite) return;
+    const encounter = encounterLayerRef.current;
+    if (!encounter) return;
+    const sprite = encounter.sceneArtwork;
 
     const request = ++artworkRequestRef.current;
     sprite.visible = false;
     sprite.texture = Texture.EMPTY;
     if (!path) return;
 
-    void Assets.load<Texture>(path).then((texture) => {
-      if (request !== artworkRequestRef.current || artworkSpriteRef.current !== sprite) return;
+    void Assets.load<Texture>(assetUrl(path)).then((texture) => {
+      if (request !== artworkRequestRef.current || encounterLayerRef.current?.sceneArtwork !== sprite) return;
       sprite.texture = texture;
       const profile = artworkProfile(sceneState.current.fishId, sceneState.current.fishRarity);
       artworkProfileRef.current = profile;
       sprite.anchor.set(profile.anchorX, profile.anchorY);
       artworkScaleRef.current = coverSprite(sprite, texture) * profile.scale;
     }).catch(() => {
-      if (request === artworkRequestRef.current && artworkSpriteRef.current === sprite) {
+      if (request === artworkRequestRef.current && encounterLayerRef.current?.sceneArtwork === sprite) {
         sprite.texture = Texture.EMPTY;
       }
     });
@@ -319,6 +370,32 @@ export function CanalScene({
     let castStartTime = 0;
     let resizeObserver: ResizeObserver | undefined;
 
+    const parallaxRig = parallaxRigRef.current;
+    const waterSurface = new WaterSurface();
+    waterSurfaceRef.current = waterSurface;
+
+    const atmosphereLayer = new AtmosphereLayer();
+    atmosphereLayerRef.current = atmosphereLayer;
+
+    const encounterLayer = new EncounterLayer();
+    encounterLayerRef.current = encounterLayer;
+
+    // Pointer move listener for 2.5D interactive parallax
+    const handlePointerMove = (e: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const normY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+      parallaxRig.setPointer(normX, normY);
+    };
+
+    const handlePointerLeave = () => {
+      parallaxRig.resetPointer();
+    };
+
+    host.addEventListener('pointermove', handlePointerMove, { passive: true });
+    host.addEventListener('pointerleave', handlePointerLeave, { passive: true });
+
     const start = async () => {
       try {
         await app.init({
@@ -341,11 +418,12 @@ export function CanalScene({
         app.canvas.setAttribute('role', 'presentation');
         app.canvas.className = 'canal-scene__canvas';
 
+        // Root scene container
         const world = new Container();
+
+        // 1. Fallback Vector World (resilience fallback before images load)
         const fallbackWorld = new Container();
-        const fallbackSky = new Graphics()
-          .rect(0, 0, SCENE_WIDTH, 252)
-          .fill({ color: 0x182e3c });
+        const fallbackSky = new Graphics().rect(0, 0, SCENE_WIDTH, 252).fill({ color: 0x182e3c });
         const fallbackBank = new Graphics()
           .rect(0, 236, SCENE_WIDTH, 54)
           .fill({ color: 0x455d4d })
@@ -353,81 +431,43 @@ export function CanalScene({
           .fill({ color: 0xb18a50 });
         const fallbackWater = new Graphics()
           .rect(0, 290, SCENE_WIDTH, SCENE_HEIGHT - 290)
-          .fill({ color: 0x15565a })
-          .rect(0, 290, SCENE_WIDTH, 7)
-          .fill({ color: 0x9ab99a, alpha: 0.68 })
-          .rect(0, SCENE_HEIGHT - 150, SCENE_WIDTH, 150)
-          .fill({ color: 0x0b343d, alpha: 0.46 });
-        const distantHouses = new Graphics()
-          .rect(96, 151, 134, 86)
-          .fill({ color: 0x80674e })
-          .moveTo(82, 153)
-          .lineTo(164, 94)
-          .lineTo(247, 153)
-          .closePath()
-          .fill({ color: 0x493d3f })
-          .rect(145, 190, 31, 47)
-          .fill({ color: 0x384e4e })
-          .rect(720, 173, 148, 64)
-          .fill({ color: 0x9e8655 })
-          .moveTo(702, 175)
-          .lineTo(790, 119)
-          .lineTo(887, 175)
-          .closePath()
-          .fill({ color: 0x554147 })
-          .rect(764, 198, 33, 39)
-          .fill({ color: 0x354c4b });
-        const fallbackReeds = new Graphics();
-        for (let index = 0; index < 14; index += 1) {
-          const x = 28 + index * 38;
-          const height = 25 + (index % 4) * 13;
-          fallbackReeds
-            .moveTo(x, 300)
-            .lineTo(x + 6, 300 - height)
-            .stroke({ color: index % 2 ? 0x526d50 : 0x7b8351, width: 4 });
-          fallbackReeds
-            .moveTo(x + 5, 300 - height + 8)
-            .lineTo(x + 18, 300 - height - 5)
-            .stroke({ color: 0x7b8351, width: 2 });
-        }
-        for (let index = 0; index < 12; index += 1) {
-          const x = 916 + index * 28;
-          const height = 28 + (index % 3) * 17;
-          fallbackReeds
-            .moveTo(x, 300)
-            .lineTo(x - 4, 300 - height)
-            .stroke({ color: index % 2 ? 0x526d50 : 0x7b8351, width: 4 });
-          fallbackReeds
-            .moveTo(x - 3, 300 - height + 6)
-            .lineTo(x - 17, 300 - height - 8)
-            .stroke({ color: 0x7b8351, width: 2 });
-        }
-        const bridge = new Graphics()
-          .rect(1002, 226, 198, 17)
-          .fill({ color: 0x624c3e })
-          .rect(1024, 243, 11, 78)
-          .fill({ color: 0x4b3d36 })
-          .rect(1168, 243, 11, 78)
-          .fill({ color: 0x4b3d36 })
-          .rect(997, 215, 9, 34)
-          .fill({ color: 0x4b3d36 })
-          .rect(1196, 215, 9, 34)
-          .fill({ color: 0x4b3d36 });
-        const dock = new Graphics()
-          .rect(84, 419, 236, 23)
-          .fill({ color: 0x8f6842 })
-          .rect(98, 442, 14, 118)
-          .fill({ color: 0x634b38 })
-          .rect(284, 442, 14, 118)
-          .fill({ color: 0x634b38 })
-          .rect(86, 427, 235, 3)
-          .fill({ color: 0xc49a5a, alpha: 0.8 });
-        fallbackWorld.addChild(fallbackSky, fallbackBank, fallbackWater, distantHouses, fallbackReeds, bridge, dock);
+          .fill({ color: 0x15565a });
+        fallbackWorld.addChild(fallbackSky, fallbackBank, fallbackWater);
 
+        // 2. Spatial Depth Layers
+        // Far Background: Sky, Moon, Distant Mountains (depth = 0.04)
+        const farBgContainer = new Container();
         const backgroundSprite = new Sprite(Texture.EMPTY);
         backgroundSprite.anchor.set(0.5);
         backgroundSprite.visible = false;
         backgroundSpriteRef.current = backgroundSprite;
+        farBgContainer.addChild(backgroundSprite, atmosphereLayer.farContainer);
+
+        // Water Surface: Cinemagraph living water (depth = 0.36)
+        const waterContainer = new Container();
+        waterContainer.addChild(waterSurface.container);
+
+        // Encounter: Fish, line, wakes, splashes (depth = 0.55)
+        const encounterContainer = new Container();
+        encounterContainer.addChild(encounterLayer.container);
+
+        // Foreground: Cutout dock (left), wooden post & reeds (right) (depth = 1.00)
+        const foregroundContainer = new Container();
+        const foregroundLeftSprite = new Sprite(Texture.EMPTY);
+        foregroundLeftSprite.anchor.set(0.5);
+        foregroundLeftSprite.visible = false;
+        foregroundLeftSpriteRef.current = foregroundLeftSprite;
+
+        const foregroundRightSprite = new Sprite(Texture.EMPTY);
+        foregroundRightSprite.anchor.set(0.5);
+        foregroundRightSprite.visible = false;
+        foregroundRightSpriteRef.current = foregroundRightSprite;
+
+        foregroundContainer.addChild(
+          foregroundLeftSprite,
+          foregroundRightSprite,
+          atmosphereLayer.foregroundContainer,
+        );
 
         const moonHalo = new Graphics()
           .ellipse(942, 103, 110, 110)
@@ -648,13 +688,17 @@ export function CanalScene({
           eventFlash,
         );
         app.stage.addChild(world);
-        loadBackground();
+
+        loadBackgroundAndLayers();
         loadArtwork(sceneState.current.artwork);
 
         const resizeScene = () => {
           const scale = Math.max(app.screen.width / SCENE_WIDTH, app.screen.height / SCENE_HEIGHT);
           world.scale.set(scale);
-          world.position.set((app.screen.width - SCENE_WIDTH * scale) / 2, (app.screen.height - SCENE_HEIGHT * scale) / 2);
+          world.position.set(
+            (app.screen.width - SCENE_WIDTH * scale) / 2,
+            (app.screen.height - SCENE_HEIGHT * scale) / 2,
+          );
         };
         resizeObserver = new ResizeObserver(resizeScene);
         resizeObserver.observe(host);
@@ -928,24 +972,30 @@ export function CanalScene({
     };
 
     void start();
+
     return () => {
       disposed = true;
+      host.removeEventListener('pointermove', handlePointerMove);
+      host.removeEventListener('pointerleave', handlePointerLeave);
       backgroundRequestRef.current += 1;
       artworkRequestRef.current += 1;
       backgroundSpriteRef.current = null;
-      artworkSpriteRef.current = null;
+      foregroundLeftSpriteRef.current = null;
+      foregroundRightSpriteRef.current = null;
       resizeObserver?.disconnect();
       if (initialized) app.destroy(true, { children: true });
-      artworkMaskTextureRef.current?.destroy(true);
-      artworkMaskTextureRef.current = null;
+      encounterLayer.destroy();
+      encounterLayerRef.current = null;
+      waterSurfaceRef.current = null;
+      atmosphereLayerRef.current = null;
     };
-  }, [loadArtwork, loadBackground]);
+  }, [loadArtwork, loadBackgroundAndLayers]);
 
   return (
     <figure
       className="canal-scene"
       aria-label={`${spotName}. ${description}`}
-      data-encounter-size={artworkProfile(fishId, fishRarity).encounterSize}
+      data-encounter-size={getArtworkProfile(fishId, fishRarity).encounterSize}
     >
       <div className="canal-scene__canvas-host" ref={hostRef} aria-hidden="true" />
       {sceneError && <p className="canal-scene__error" role="status">{errorMessage}</p>}
