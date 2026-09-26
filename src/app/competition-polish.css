@@ -1,0 +1,804 @@
+/* Competition visual polish
+   This layer intentionally stays separate from the core theme so iteration
+   does not become another stack of hard-to-audit overrides. It is limited to
+   the Fishing vertical slice. */
+
+.game-shell[data-tab='fishing'] {
+  --competition-cyan: #8fe6ff;
+  --competition-cyan-soft: rgba(143, 230, 255, .28);
+  --competition-gold: #f4cf87;
+  --competition-gold-soft: rgba(244, 207, 135, .26);
+  --competition-mint: #7ee0c0;
+  --competition-danger: #ff8f98;
+  --competition-panel: rgba(2, 12, 25, .72);
+  --competition-panel-strong: rgba(2, 11, 24, .9);
+  --competition-line: rgba(180, 222, 245, .2);
+  position: relative;
+  overflow-x: clip;
+}
+
+.game-shell[data-tab='fishing']::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 73% 18%, rgba(93, 179, 225, .13), transparent 32%),
+    radial-gradient(circle at 20% 76%, rgba(48, 122, 139, .11), transparent 36%),
+    linear-gradient(180deg, rgba(2, 8, 20, .03), rgba(2, 8, 20, .26));
+  content: '';
+}
+
+.game-shell[data-tab='fishing'] > * {
+  position: relative;
+}
+
+/* Global game chrome becomes quieter so the scene owns the screen. */
+.game-shell[data-tab='fishing'] .masthead {
+  border-bottom-color: rgba(150, 205, 233, .18);
+  background:
+    linear-gradient(180deg, rgba(3, 12, 27, .88), rgba(3, 12, 27, .58));
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.game-shell[data-tab='fishing'] .masthead::after {
+  position: absolute;
+  right: 8%;
+  bottom: -1px;
+  left: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(143, 230, 255, .56), transparent);
+  content: '';
+}
+
+.game-shell[data-tab='fishing'] .section-nav {
+  box-shadow:
+    0 12px 32px rgba(0, 4, 15, .2),
+    inset 0 1px rgba(255, 255, 255, .07);
+  backdrop-filter: blur(16px);
+}
+
+.game-shell[data-tab='fishing'] .section-nav__item {
+  border-radius: 999px;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.game-shell[data-tab='fishing'] .section-nav__item:hover {
+  transform: translateY(-1px);
+}
+
+.game-shell[data-tab='fishing'] .section-nav__item.is-current {
+  background:
+    linear-gradient(180deg, rgba(29, 94, 139, .9), rgba(10, 45, 76, .92));
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .13),
+    0 0 20px rgba(88, 192, 244, .13);
+}
+
+/* The actual playable frame is treated like a cinematic stage. */
+.fishing-layout .scene-frame {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(154, 211, 237, .28);
+  border-radius: 14px;
+  background: #020b18;
+  box-shadow:
+    0 28px 75px rgba(0, 3, 13, .58),
+    0 0 0 1px rgba(219, 242, 255, .03),
+    inset 0 0 80px rgba(0, 6, 18, .22);
+}
+
+.fishing-layout .scene-frame::before {
+  z-index: 2;
+  background:
+    linear-gradient(90deg, rgba(1, 8, 19, .82), rgba(1, 8, 19, .2) 28%, transparent 50%),
+    linear-gradient(0deg, rgba(1, 7, 17, .78), rgba(1, 7, 17, .12) 27%, transparent 48%),
+    radial-gradient(circle at 72% 30%, transparent 0 27%, rgba(0, 6, 18, .06) 56%, rgba(0, 5, 16, .24) 100%);
+}
+
+.fishing-layout .scene-frame::after {
+  z-index: 3;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 242, 255, .05),
+    inset 0 -80px 90px rgba(1, 7, 18, .18),
+    inset 0 0 95px rgba(0, 6, 17, .2);
+}
+
+.scene-cinematic-chrome {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scene-cinematic-chrome__corner {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  opacity: .48;
+}
+
+.scene-cinematic-chrome__corner::before,
+.scene-cinematic-chrome__corner::after {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(186, 225, 244, .78), rgba(186, 225, 244, .08));
+  content: '';
+}
+
+.scene-cinematic-chrome__corner::before {
+  width: 32px;
+  height: 1px;
+}
+
+.scene-cinematic-chrome__corner::after {
+  width: 1px;
+  height: 32px;
+}
+
+.scene-cinematic-chrome__corner--tl { top: 14px; left: 14px; }
+.scene-cinematic-chrome__corner--tr { top: 14px; right: 14px; transform: scaleX(-1); }
+.scene-cinematic-chrome__corner--bl { bottom: 14px; left: 14px; transform: scaleY(-1); }
+.scene-cinematic-chrome__corner--br { right: 14px; bottom: 14px; transform: scale(-1); }
+
+.scene-cinematic-chrome__horizon {
+  position: absolute;
+  right: 18%;
+  bottom: 21%;
+  left: 18%;
+  height: 1px;
+  opacity: .18;
+  background: linear-gradient(90deg, transparent, rgba(156, 227, 255, .95), transparent);
+  transform: scaleX(.72);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    background 220ms ease;
+}
+
+.scene-cinematic-chrome__focus {
+  position: absolute;
+  top: 50%;
+  left: 67%;
+  width: min(34vw, 410px);
+  aspect-ratio: 1.55;
+  border-radius: 50%;
+  opacity: .11;
+  background: radial-gradient(ellipse, rgba(122, 216, 255, .18), rgba(122, 216, 255, .04) 46%, transparent 72%);
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    filter 220ms ease;
+}
+
+/* Location selection reads as a destination ribbon instead of a web carousel. */
+.fishing-layout[data-phase='ready'] .spot-gallery {
+  padding: .25rem;
+  border: 1px solid rgba(179, 218, 239, .13);
+  border-radius: 11px;
+  background: rgba(2, 12, 25, .34);
+  box-shadow: 0 10px 26px rgba(0, 4, 16, .18);
+  backdrop-filter: blur(9px);
+}
+
+.fishing-layout[data-phase='ready'] .spot-gallery__item {
+  border-color: rgba(165, 207, 232, .2);
+  opacity: .64;
+  filter: saturate(.82) brightness(.86);
+  transition:
+    opacity 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.fishing-layout[data-phase='ready'] .spot-gallery__item:hover:not(:disabled) {
+  z-index: 1;
+  opacity: .9;
+  filter: none;
+  transform: translateY(-2px);
+}
+
+.fishing-layout[data-phase='ready'] .spot-gallery__item.is-current {
+  opacity: 1;
+  filter: none;
+  border-color: rgba(244, 207, 135, .82);
+  box-shadow:
+    0 8px 24px rgba(0, 5, 15, .4),
+    0 0 0 1px rgba(244, 207, 135, .28),
+    0 0 22px rgba(244, 207, 135, .13);
+}
+
+.fishing-layout[data-phase='ready'] .field-heading {
+  text-wrap: balance;
+}
+
+.fishing-layout[data-phase='ready'] .field-heading h2 {
+  max-width: 13ch;
+  margin: 0;
+  color: #fff1d0;
+  font-size: clamp(2.45rem, 4.4vw, 5.4rem);
+  font-weight: 600;
+  letter-spacing: -.035em;
+  text-shadow:
+    0 4px 24px rgba(0, 4, 15, .88),
+    0 1px rgba(255, 255, 255, .16);
+}
+
+.fishing-layout[data-phase='ready'] .field-heading h2::after {
+  display: block;
+  width: 78px;
+  height: 2px;
+  margin-top: .65rem;
+  background: linear-gradient(90deg, var(--competition-gold), transparent);
+  box-shadow: 0 0 14px rgba(244, 207, 135, .34);
+  content: '';
+}
+
+.fishing-layout[data-phase='ready'] .field-heading p {
+  max-width: 42ch;
+  color: rgba(228, 239, 247, .86);
+  font-size: 1rem;
+  line-height: 1.58;
+}
+
+/* Compact loadout: it should feel like tackle laid out on the edge of the scene. */
+.fishing-layout[data-phase='ready'] .setup-card {
+  overflow: hidden;
+  border-color: rgba(175, 213, 234, .21);
+  background:
+    linear-gradient(145deg, rgba(4, 19, 36, .77), rgba(2, 11, 24, .58));
+  box-shadow:
+    0 18px 45px rgba(0, 4, 15, .3),
+    inset 0 1px rgba(255, 255, 255, .06);
+  backdrop-filter: blur(17px);
+}
+
+.fishing-layout[data-phase='ready'] .setup-card::before {
+  position: absolute;
+  top: 0;
+  right: 18%;
+  left: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 207, 135, .65), transparent);
+  content: '';
+}
+
+.fishing-layout[data-phase='ready'] .setup-gear li {
+  border-radius: 8px;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.fishing-layout[data-phase='ready'] .setup-gear li:hover {
+  background: rgba(68, 141, 182, .11);
+  transform: translateY(-1px);
+}
+
+/* CAST is the one unmistakable decision in preparation. */
+.fishing-layout .scene-ready-action {
+  z-index: 7;
+}
+
+.fishing-layout .scene-ready-action .action-button--cast {
+  position: relative;
+  overflow: hidden;
+  min-width: 220px;
+  min-height: 60px;
+  border: 1px solid rgba(166, 230, 255, .82);
+  border-radius: 11px;
+  background:
+    linear-gradient(180deg, rgba(45, 151, 224, .98), rgba(8, 67, 133, .98));
+  box-shadow:
+    0 14px 38px rgba(23, 132, 220, .38),
+    0 0 0 1px rgba(184, 235, 255, .13),
+    inset 0 1px rgba(255, 255, 255, .36);
+  font-size: 1.15rem;
+  letter-spacing: .01em;
+}
+
+.fishing-layout .scene-ready-action .action-button--cast::before {
+  position: absolute;
+  top: -120%;
+  bottom: -120%;
+  left: -32%;
+  width: 24%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .42), transparent);
+  content: '';
+  transform: rotate(16deg);
+  transition: left 560ms cubic-bezier(.2, .7, .2, 1);
+}
+
+.fishing-layout .scene-ready-action .action-button--cast:hover::before {
+  left: 116%;
+}
+
+.fishing-layout .scene-ready-action .action-button--cast:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 18px 44px rgba(23, 132, 220, .48),
+    0 0 25px rgba(106, 214, 255, .25),
+    inset 0 1px rgba(255, 255, 255, .4);
+}
+
+/* Encounter HUD: intent owns the visual hierarchy. */
+.fishing-layout[data-phase='player-turn'] .scene-callout {
+  width: min(25rem, 40%);
+  padding: .72rem .9rem .8rem;
+  border: 1px solid rgba(151, 210, 238, .18);
+  border-left: 2px solid var(--intent-accent, var(--competition-cyan));
+  border-radius: 9px;
+  background:
+    linear-gradient(100deg, rgba(2, 13, 27, .9), rgba(2, 13, 27, .56));
+  box-shadow:
+    0 18px 44px rgba(0, 4, 15, .34),
+    -10px 0 34px color-mix(in srgb, var(--intent-accent, var(--competition-cyan)) 10%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.fishing-layout[data-intent='steady-pull'] { --intent-accent: #8ed6ff; }
+.fishing-layout[data-intent='power-dash'] { --intent-accent: #7de5ee; }
+.fishing-layout[data-intent='deep-dive'] { --intent-accent: #8aa7ff; }
+.fishing-layout[data-intent='thrash'] { --intent-accent: #ffad90; }
+.fishing-layout[data-intent='recover'] { --intent-accent: #95e0ba; }
+
+.fishing-layout[data-phase='player-turn'] .scene-callout__meta {
+  margin-bottom: .2rem;
+  color: rgba(218, 231, 242, .68);
+  font-size: .66rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.fishing-layout[data-phase='player-turn'] .scene-callout h3 {
+  margin-bottom: .4rem;
+  color: #fff0cc;
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
+}
+
+.fishing-layout[data-phase='player-turn'] .scene-callout__intent {
+  position: relative;
+  overflow: hidden;
+  padding: .56rem .68rem .6rem;
+  border: 1px solid color-mix(in srgb, var(--intent-accent) 38%, transparent);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--intent-accent) 12%, transparent), transparent 62%);
+}
+
+.fishing-layout[data-phase='player-turn'] .scene-callout__intent::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--intent-accent);
+  box-shadow: 0 0 12px var(--intent-accent);
+  content: '';
+}
+
+.fishing-layout[data-phase='player-turn'] .scene-callout__intent strong {
+  color: #fff;
+  font-size: clamp(.94rem, 1.35vw, 1.15rem);
+  letter-spacing: .01em;
+}
+
+/* Vitals form one instrument strip rather than a row of cards. */
+.fishing-layout[data-phase='player-turn'] .combat-vitals {
+  width: min(790px, 72%);
+  padding: .38rem .5rem;
+  border: 1px solid rgba(163, 210, 234, .15);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(3, 15, 29, .8), rgba(3, 14, 28, .64));
+  box-shadow:
+    0 16px 34px rgba(0, 4, 14, .22),
+    inset 0 1px rgba(255, 255, 255, .04);
+  backdrop-filter: blur(12px);
+}
+
+.fishing-layout[data-phase='player-turn'] .combat-vitals__metrics {
+  gap: 0;
+}
+
+.fishing-layout[data-phase='player-turn'] .combat-vital {
+  padding: .25rem .7rem .34rem;
+  border-radius: 0;
+  background: transparent;
+}
+
+.fishing-layout[data-phase='player-turn'] .combat-vital + .combat-vital {
+  border-left: 1px solid rgba(174, 215, 237, .12);
+}
+
+.fishing-layout[data-phase='player-turn'] .combat-vital__heading {
+  font-size: .64rem;
+  letter-spacing: .01em;
+}
+
+.fishing-layout[data-phase='player-turn'] .combat-vital progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+}
+
+/* The command bar reads as a single game controller, not five web cards. */
+.fishing-layout .action-dock[data-control-surface='combat-actions'] {
+  overflow: visible;
+  padding: .48rem;
+  border: 1px solid rgba(163, 210, 235, .18);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(4, 18, 34, .94), rgba(2, 11, 23, .96));
+  box-shadow:
+    0 24px 55px rgba(0, 3, 13, .48),
+    0 0 0 1px rgba(220, 242, 255, .025),
+    inset 0 1px rgba(255, 255, 255, .06);
+  backdrop-filter: blur(18px);
+}
+
+.fishing-layout .action-dock__status-row {
+  min-height: 24px;
+  margin: 0 .25rem .36rem;
+  padding: 0 .25rem;
+  border-bottom: 1px solid rgba(166, 207, 231, .1);
+  color: rgba(211, 228, 239, .7);
+  font-size: .68rem;
+}
+
+.fishing-layout .game-command-bar {
+  gap: .34rem;
+}
+
+.fishing-layout .game-command-bar .action-button {
+  position: relative;
+  overflow: visible;
+  min-height: 88px;
+  border: 1px solid rgba(126, 182, 214, .27);
+  border-radius: 9px;
+  background:
+    linear-gradient(165deg, rgba(18, 48, 73, .92), rgba(5, 22, 39, .96));
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, .045),
+    0 5px 12px rgba(0, 4, 14, .2);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    filter 140ms ease;
+}
+
+.fishing-layout .game-command-bar .action-button::before {
+  position: absolute;
+  top: 0;
+  right: 20%;
+  left: 20%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(163, 222, 250, .35), transparent);
+  content: '';
+}
+
+.fishing-layout .game-command-bar .action-button:hover:not(:disabled) {
+  z-index: 2;
+  border-color: rgba(171, 227, 252, .58);
+  transform: translateY(-3px);
+  box-shadow:
+    0 13px 24px rgba(0, 4, 15, .35),
+    0 0 18px rgba(88, 191, 240, .1),
+    inset 0 1px rgba(255, 255, 255, .08);
+}
+
+.fishing-layout .game-command-bar .action-button[data-matchup='advantage'] {
+  border-color: rgba(126, 224, 192, .52);
+  background:
+    linear-gradient(165deg, rgba(21, 69, 72, .92), rgba(5, 28, 38, .97));
+}
+
+.fishing-layout .game-command-bar .action-button[data-matchup='advantage']::before {
+  background: linear-gradient(90deg, transparent, rgba(126, 224, 192, .8), transparent);
+}
+
+.fishing-layout .game-command-bar .action-button[data-matchup='disadvantage'] {
+  border-color: rgba(255, 143, 152, .42);
+  background:
+    linear-gradient(165deg, rgba(70, 39, 51, .9), rgba(31, 17, 31, .96));
+}
+
+.action-shortcut {
+  position: absolute;
+  z-index: 3;
+  top: .38rem;
+  left: .42rem;
+  display: grid;
+  width: 1.32rem;
+  height: 1.32rem;
+  place-items: center;
+  border: 1px solid rgba(179, 218, 240, .28);
+  border-radius: 5px;
+  background: rgba(1, 10, 22, .7);
+  color: rgba(227, 239, 247, .76);
+  font-family: 'Kanit', sans-serif;
+  font-size: .63rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.fishing-layout .game-command-bar .action-card__head {
+  justify-content: center;
+}
+
+.fishing-layout .game-command-bar .action-icon {
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 4px 8px rgba(0, 5, 15, .42));
+}
+
+.fishing-layout .game-command-bar .action-card__cost {
+  position: absolute;
+  top: .36rem;
+  right: .4rem;
+  min-width: 2rem;
+  justify-content: center;
+  padding: .15rem .25rem;
+  border-radius: 99px;
+  background: rgba(2, 13, 27, .55);
+}
+
+.fishing-layout .game-command-bar .action-button__top {
+  justify-content: center;
+  gap: .32rem;
+  text-align: center;
+}
+
+.fishing-layout .game-command-bar .action-button__top > strong {
+  font-size: .86rem;
+  letter-spacing: .005em;
+}
+
+.fishing-layout .game-command-bar .action-matchup {
+  border-radius: 99px;
+  padding: .08rem .28rem;
+  font-size: .59rem;
+}
+
+/* State-specific cinematic response around the scene. */
+.fishing-layout[data-presentation-event='CAST'] .scene-frame {
+  animation: competition-cast-stage 390ms cubic-bezier(.16, .7, .26, 1) both;
+}
+
+.fishing-layout[data-presentation-event='CAST'] .scene-cinematic-chrome__focus {
+  opacity: .34;
+  transform: translate(-50%, -50%) scale(1.08);
+  filter: brightness(1.35);
+}
+
+.fishing-layout[data-presentation-event='PLAYER_ACTION_RESOLVED'] .scene-cinematic-chrome__horizon,
+.fishing-layout[data-presentation-event='FISH_ACTION_RESOLVED'] .scene-cinematic-chrome__horizon {
+  opacity: .46;
+  transform: scaleX(1);
+}
+
+.fishing-layout[data-intent='power-dash'] .scene-cinematic-chrome__horizon {
+  opacity: .48;
+  background: linear-gradient(90deg, transparent, rgba(116, 234, 244, .95), transparent);
+  transform: scaleX(1.05);
+}
+
+.fishing-layout[data-intent='deep-dive'] .scene-cinematic-chrome__focus {
+  opacity: .2;
+  transform: translate(-50%, -42%) scale(.88);
+  background: radial-gradient(ellipse, rgba(94, 121, 255, .2), rgba(36, 71, 139, .05) 52%, transparent 74%);
+}
+
+.fishing-layout[data-intent='thrash'] .scene-cinematic-chrome__focus {
+  opacity: .2;
+  filter: saturate(1.4);
+}
+
+.fishing-layout[data-intent='recover'] .scene-cinematic-chrome__focus {
+  opacity: .19;
+  background: radial-gradient(ellipse, rgba(115, 226, 177, .18), rgba(115, 226, 177, .03) 48%, transparent 72%);
+}
+
+.fishing-layout[data-rarity='king'] .scene-frame {
+  border-color: rgba(222, 198, 255, .32);
+  box-shadow:
+    0 30px 85px rgba(0, 2, 12, .62),
+    0 0 38px rgba(111, 82, 187, .12),
+    inset 0 0 90px rgba(36, 21, 69, .15);
+}
+
+.fishing-layout[data-rarity='king'] .scene-cinematic-chrome__corner::before,
+.fishing-layout[data-rarity='king'] .scene-cinematic-chrome__corner::after {
+  background: linear-gradient(90deg, rgba(228, 212, 255, .9), rgba(175, 145, 255, .09));
+}
+
+.fishing-layout[data-boss-phase='3'] .scene-cinematic-chrome__focus {
+  opacity: .28;
+  filter: saturate(1.28) contrast(1.06);
+}
+
+@keyframes competition-cast-stage {
+  0% { filter: brightness(.9) saturate(.9); }
+  42% { filter: brightness(1.12) saturate(1.05); }
+  100% { filter: none; }
+}
+
+/* Catch / failure outcomes get a stronger stage than a generic modal. */
+.fishing-layout[data-phase='caught'] .action-dock[data-control-surface='combat-outcome'] {
+  border: 1px solid rgba(244, 207, 135, .28);
+  border-radius: 14px;
+  background:
+    linear-gradient(150deg, rgba(5, 19, 36, .97), rgba(10, 26, 45, .94));
+  box-shadow:
+    0 32px 80px rgba(0, 2, 11, .66),
+    0 0 36px rgba(244, 207, 135, .09),
+    inset 0 1px rgba(255, 255, 255, .06);
+}
+
+.fishing-layout[data-phase='caught'] .catch-reveal__headline {
+  border-color: rgba(244, 207, 135, .22);
+  background:
+    linear-gradient(120deg, rgba(10, 31, 50, .94), rgba(4, 17, 32, .86));
+}
+
+.fishing-layout[data-phase='caught'] .catch-reveal__headline h3 {
+  color: #fff0c8;
+  text-shadow: 0 3px 18px rgba(0, 3, 13, .72);
+}
+
+.fishing-layout[data-phase='escaped'] .action-dock[data-control-surface='combat-outcome'],
+.fishing-layout[data-phase='line-break'] .action-dock[data-control-surface='combat-outcome'] {
+  border: 1px solid rgba(194, 217, 230, .18);
+  border-radius: 13px;
+  background: rgba(3, 15, 29, .93);
+  box-shadow: 0 26px 60px rgba(0, 3, 13, .56);
+}
+
+/* Mobile preserves spectacle but trims decorative chrome before readability. */
+@media (max-width: 700px) {
+  .game-shell[data-tab='fishing'] .masthead {
+    backdrop-filter: blur(12px);
+  }
+
+  .scene-cinematic-chrome__corner {
+    width: 24px;
+    height: 24px;
+    opacity: .3;
+  }
+
+  .scene-cinematic-chrome__corner::before { width: 21px; }
+  .scene-cinematic-chrome__corner::after { height: 21px; }
+
+  .scene-cinematic-chrome__corner--tl { top: 8px; left: 8px; }
+  .scene-cinematic-chrome__corner--tr { top: 8px; right: 8px; }
+  .scene-cinematic-chrome__corner--bl { bottom: 8px; left: 8px; }
+  .scene-cinematic-chrome__corner--br { right: 8px; bottom: 8px; }
+
+  .scene-cinematic-chrome__horizon {
+    right: 8%;
+    bottom: 23%;
+    left: 8%;
+  }
+
+  .scene-cinematic-chrome__focus {
+    left: 64%;
+    width: 62vw;
+  }
+
+  .fishing-layout[data-phase='ready'] .field-heading h2 {
+    font-size: 2rem;
+  }
+
+  .fishing-layout[data-phase='ready'] .spot-gallery {
+    border-radius: 8px;
+    backdrop-filter: blur(6px);
+  }
+
+  .fishing-layout .scene-ready-action .action-button--cast {
+    min-width: 0;
+    min-height: 54px;
+  }
+
+  .fishing-layout[data-phase='player-turn'] .scene-callout {
+    width: min(235px, 65%);
+    padding: .46rem .55rem .5rem;
+    border-radius: 7px;
+  }
+
+  .fishing-layout[data-phase='player-turn'] .combat-vitals {
+    width: calc(100% - 1rem);
+    padding: .28rem;
+    border-radius: 7px;
+  }
+
+  .fishing-layout[data-phase='player-turn'] .combat-vital {
+    padding: .22rem .34rem .28rem;
+  }
+
+  .fishing-layout .action-dock[data-control-surface='combat-actions'] {
+    padding: .38rem .3rem .46rem;
+    border-radius: 0;
+  }
+
+  .fishing-layout .game-command-bar {
+    gap: .28rem;
+  }
+
+  .fishing-layout .game-command-bar .action-button {
+    min-height: 78px;
+    border-radius: 8px;
+  }
+
+  .action-shortcut {
+    top: .28rem;
+    left: .3rem;
+    width: 1.16rem;
+    height: 1.16rem;
+    font-size: .56rem;
+  }
+
+  .fishing-layout .game-command-bar .action-card__cost {
+    top: .27rem;
+    right: .3rem;
+  }
+
+  .fishing-layout .game-command-bar .action-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .fishing-layout .game-command-bar .action-button__top > strong {
+    font-size: .72rem;
+  }
+}
+
+@media (max-width: 430px) {
+  .fishing-layout[data-phase='ready'] .spot-gallery__item span {
+    font-size: .62rem;
+  }
+
+  .fishing-layout[data-phase='player-turn'] .scene-callout {
+    width: min(220px, 67%);
+  }
+
+  .fishing-layout[data-phase='player-turn'] .combat-vitals__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Respect both OS and explicit game reduced-motion settings. */
+@media (prefers-reduced-motion: reduce) {
+  .fishing-layout[data-presentation-event='CAST'] .scene-frame {
+    animation: none;
+  }
+
+  .game-shell[data-tab='fishing'] .section-nav__item,
+  .fishing-layout[data-phase='ready'] .spot-gallery__item,
+  .fishing-layout .game-command-bar .action-button,
+  .scene-cinematic-chrome__horizon,
+  .scene-cinematic-chrome__focus {
+    transition-duration: .01ms !important;
+  }
+
+  .fishing-layout .scene-ready-action .action-button--cast::before {
+    display: none;
+  }
+}
+
+.game-shell[data-reduced-motion='true'] .fishing-layout[data-presentation-event='CAST'] .scene-frame {
+  animation: none;
+}
+
+.game-shell[data-reduced-motion='true'] .fishing-layout .scene-ready-action .action-button--cast::before {
+  display: none;
+}
