@@ -115,9 +115,9 @@ function TacticCards({
             data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` · ${copy.modeReason[preview.modeReason]}` : ''}`}
           >
             <span className="action-shortcut" aria-hidden="true">{index + 1}</span>
-            <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
+            <img className="action-card__art" src={assetUrl(`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`)} alt="" />
             <span className="action-card__head">
-              <img className="action-icon" src={`/theme_games/action-icon-${action}.webp`} alt="" />
+              <img className="action-icon" src={assetUrl(`/theme_games/action-icon-${action}.webp`)} alt="" />
               <span className="action-card__cost"><strong>1</strong><span>AP</span></span>
             </span>
             <span className="action-button__top">
@@ -348,7 +348,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               aria-pressed={spot.id === selectedSpotId}
               onClick={() => selectSpot(spot.id)}
             >
-              <img src={`/theme_games/spot-${spot.id}.webp`} alt="" />
+              <img src={assetUrl(`/theme_games/spot-${spot.id}.webp`)} alt="" />
               <div className="spot-gallery__info">
                 <span className="spot-gallery__name">{localize(spot.name, locale)}{!unlocked && ` · ${copy.locked}`}</span>
                 {unlocked && (
