@@ -53,7 +53,7 @@ html { scrollbar-color: #346886 #07192b; }
 .game-shell {
   width: 100%; max-width: 1760px; min-height: 100vh;
   background: linear-gradient(180deg, rgba(2, 10, 23, .18), rgba(2, 10, 23, .27) 60%, #061423 100%),
-    url('/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png') center / cover fixed;
+    var(--canal-bg-image, url('/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png')) center / cover fixed;
 }
 .masthead {
   grid-template-columns: minmax(225px, 1fr) auto auto;

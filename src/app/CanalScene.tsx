@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Rarity } from '../content/types';
 import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
+import { assetUrl } from './asset';
 
 type CanalSceneProps = {
   artwork: string | null;
@@ -249,7 +250,7 @@ export function CanalScene({
     sprite.visible = false;
     sprite.texture = Texture.EMPTY;
 
-    void Assets.load<Texture>(VILLAGE_CANAL_BACKGROUND).then((texture) => {
+    void Assets.load<Texture>(assetUrl(VILLAGE_CANAL_BACKGROUND)).then((texture) => {
       if (request !== backgroundRequestRef.current || backgroundSpriteRef.current !== sprite) return;
       sprite.texture = texture;
       coverSprite(sprite, texture);
@@ -270,7 +271,7 @@ export function CanalScene({
     sprite.texture = Texture.EMPTY;
     if (!path) return;
 
-    void Assets.load<Texture>(path).then((texture) => {
+    void Assets.load<Texture>(assetUrl(path)).then((texture) => {
       if (request !== artworkRequestRef.current || artworkSpriteRef.current !== sprite) return;
       sprite.texture = texture;
       const profile = artworkProfile(sceneState.current.fishId, sceneState.current.fishRarity);

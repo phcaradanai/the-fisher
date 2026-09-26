@@ -6,6 +6,7 @@ import { UI_COPY } from './copy';
 import type { Locale } from './copy';
 import { presentationCombatEvent, useFishingPresentation } from './presentation';
 import { PANEL_BY_TAB } from './Panels';
+import { assetUrl } from './asset';
 import './styles.css';
 import './fantasy-canal.css';
 import './competition-polish.css';
@@ -44,10 +45,16 @@ export function App() {
 
 
   return (
-    <div className="game-shell" data-reduced-motion={reducedMotion} data-tab={activeTab} data-fishing-phase={fishingPhase}>
+    <div
+      className="game-shell"
+      data-reduced-motion={reducedMotion}
+      data-tab={activeTab}
+      data-fishing-phase={fishingPhase}
+      style={{ '--canal-bg-image': `url("${assetUrl('/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png')}")` } as React.CSSProperties}
+    >
       <header className="masthead liquid-pane liquid-pane--bar">
         <div className="masthead__brand">
-          <img className="brand-mark" src="/theme_games/brand-mark.webp" alt="" />
+          <img className="brand-mark" src={assetUrl('/theme_games/brand-mark.webp')} alt="" />
           <div>
             <h1>{copy.title}</h1>
             <p>{copy.chapter} 1 <span aria-hidden="true">·</span> {copy.chapterOne}</p>
@@ -90,7 +97,7 @@ export function App() {
             key={tab}
             onClick={() => setTab(tab)}
           >
-            <img className="nav-icon" src={`/theme_games/nav-icon-${tab}.webp`} alt="" />
+            <img className="nav-icon" src={assetUrl(`/theme_games/nav-icon-${tab}.webp`)} alt="" />
             {copy[tab]}
           </button>
         ))}

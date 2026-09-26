@@ -12,6 +12,7 @@ import { UI_COPY, localize } from './copy';
 import type { Locale } from './copy';
 import { presentationCombatEvent, useFishingPresentation } from './presentation';
 import { CanalScene } from './CanalScene';
+import { assetUrl } from './asset';
 
 type UiCopy = typeof UI_COPY.en;
 
@@ -62,7 +63,7 @@ function FishArtworkImage({
   return (
     <img
       className={className}
-      src={fish.artwork}
+      src={assetUrl(fish.artwork)}
       alt={name}
       loading={loading}
       decoding="async"
@@ -114,9 +115,9 @@ function TacticCards({
             data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` · ${copy.modeReason[preview.modeReason]}` : ''}`}
           >
             <span className="action-shortcut" aria-hidden="true">{index + 1}</span>
-            <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
+            <img className="action-card__art" src={assetUrl(`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`)} alt="" />
             <span className="action-card__head">
-              <img className="action-icon" src={`/theme_games/action-icon-${action}.webp`} alt="" />
+              <img className="action-icon" src={assetUrl(`/theme_games/action-icon-${action}.webp`)} alt="" />
               <span className="action-card__cost"><strong>1</strong><span>AP</span></span>
             </span>
             <span className="action-button__top">
@@ -347,7 +348,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               aria-pressed={spot.id === selectedSpotId}
               onClick={() => selectSpot(spot.id)}
             >
-              <img src={`/theme_games/spot-${spot.id}.webp`} alt="" />
+              <img src={assetUrl(`/theme_games/spot-${spot.id}.webp`)} alt="" />
               <div className="spot-gallery__info">
                 <span className="spot-gallery__name">{localize(spot.name, locale)}{!unlocked && ` · ${copy.locked}`}</span>
                 {unlocked && (
@@ -502,7 +503,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                 <p className="scene-ready-action__hint liquid-pane liquid-pane--pill liquid-pane--warm" role="note">{copy.firstEncounter.castHint}</p>
               )}
               <button className="action-button action-button--cast liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={() => markSoundGesture(cast)}>
-                <img className="cast-icon" src="/theme_games/nav-icon-fishing.webp" alt="" />
+                <img className="cast-icon" src={assetUrl('/theme_games/nav-icon-fishing.webp')} alt="" />
                 {copy.cast}
               </button>
             </div>
@@ -683,7 +684,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           <ul className="setup-gear">
             {getEquippedGearItems({ equippedGear }).map((item) => (
               <li className={`setup-gear__${item.category}`} key={item.id}>
-                <img src={`/theme_games/gear-${item.category}.webp`} alt="" />
+                <img src={assetUrl(`/theme_games/gear-${item.category}.webp`)} alt="" />
                 <span>{copy.category[item.category]}</span>
                 <strong>{localize(item.name, locale)}</strong>
               </li>
@@ -868,7 +869,7 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
       </nav>
       {currentItem && (
         <section className="gear-featured liquid-pane" aria-labelledby="equipped-gear-title">
-          <div className="gear-featured__mark"><img className="gear-art-icon" src={`/theme_games/gear-${currentItem.category}.webp`} alt="" /></div>
+          <div className="gear-featured__mark"><img className="gear-art-icon" src={assetUrl(`/theme_games/gear-${currentItem.category}.webp`)} alt="" /></div>
           <div className="gear-featured__details">
             <p className="gear-section-label">{copy.equippedNow}</p>
             <div className="gear-entry__heading">
@@ -897,7 +898,7 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
           const locked = item.unlockAfter !== undefined && !seenStoryEvents.includes(item.unlockAfter);
           return (
             <li className="gear-entry liquid-pane liquid-pane--interactive" key={item.id}>
-              <img className="gear-art-icon" src={`/theme_games/gear-${item.category}.webp`} alt="" />
+              <img className="gear-art-icon" src={assetUrl(`/theme_games/gear-${item.category}.webp`)} alt="" />
               <div className="gear-entry__details">
                 <div className="gear-entry__heading">
                   <h3>{localize(item.name, locale)}</h3>
