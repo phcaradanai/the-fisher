@@ -32,11 +32,6 @@ type UiCopy = {
   turn: string;
   actionPoints: string;
   intent: string;
-  distance: string;
-  distanceRisk: string;
-  tension: string;
-  stamina: string;
-  lineDurability: string;
   cast: string;
   reel: string;
   pull: string;
@@ -47,7 +42,6 @@ type UiCopy = {
   firstEncounter: {
     castHint: string;
     turnHint: string;
-    role: Record<TurnFishingAction, string>;
   };
   phase: Record<TurnCombatPhase, string>;
   bossPhase: Record<1 | 2 | 3, string>;
@@ -63,7 +57,6 @@ type UiCopy = {
   checkRolls: string;
   checkTotal: string;
   difficulty: string;
-  lineState: Record<'slack' | 'safe' | 'high' | 'danger' | 'critical', string>;
   fishEscaped: string;
   lineBroken: string;
   tryAgain: string;
@@ -136,7 +129,7 @@ export const UI_COPY: Record<Locale, UiCopy> = {
   en: {
     title: 'Village Canal',
     chapter: 'Chapter',
-    chapterOne: 'A line in the water',
+    chapterOne: 'A duel beneath the reeds',
     coins: 'coins',
     reputation: 'trust',
     saveReady: 'Saved on this device',
@@ -153,45 +146,33 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     story: 'Local stories',
     chooseSpot: 'Choose fishing spot',
     area: 'Fishing spot',
-    localLegend: 'Read the water, answer the fish, and let the line breathe.',
-    sceneError: 'The canal scene could not start. Fishing controls remain available.',
-    preparation: 'Rig your line',
-    preparationHint: 'Choose a spot and bait. Your rod and reel shape every response.',
+    localLegend: 'Read the fish’s intent. Spend two actions. Survive its reply.',
+    sceneError: 'Battle artwork could not load. Tactical cards remain playable.',
+    preparation: 'Choose your opening',
+    preparationHint: 'Pick a spot and bait, then cast. Each move costs 1 AP.',
     fight: 'Tactical duel',
     turn: 'Turn',
     actionPoints: 'AP',
     intent: 'Fish intent',
-    distance: 'Distance',
-    distanceRisk: 'Escape risk',
-    tension: 'Line tension',
-    stamina: 'Fish stamina',
-    lineDurability: 'Line durability',
-    cast: 'Cast and meet the fish',
+    cast: 'Cast to begin the duel',
     reel: 'REEL',
     pull: 'PULL',
     release: 'RELEASE',
     brace: 'BRACE',
     observe: 'OBSERVE',
     actionHint: {
-      reel: 'Gain line steadily; tension rises.',
-      pull: 'Break stamina quickly; adds more tension.',
-      release: 'Ease tension, but give up distance.',
+      reel: 'Advance steadily; build some strain.',
+      pull: 'Break stamina quickly; build more strain.',
+      release: 'Relieve strain, but surrender progress.',
       brace: 'Counter a surge and soften its response.',
       observe: 'Read intent; success records a note and sharpens your next move.',
     },
     firstEncounter: {
-      castHint: 'CAST starts the first encounter. Read the fish, then choose how to answer it.',
-      turnHint: '2 AP per round. The fish responds when AP is exhausted. Advantage aids a match; disadvantage warns of conflict.',
-      role: {
-        reel: 'Closes distance; tension rises.',
-        pull: 'Drains stamina; tension rises.',
-        release: 'Lowers tension; loses distance.',
-        brace: 'Absorbs a rush.',
-        observe: 'Reads intent.',
-      },
+      castHint: 'CAST starts your first duel. Read the fish’s intent, then pick a counter.',
+      turnHint: 'Each card costs 1 AP. Play two cards; the fish acts when AP runs out. Match its intent for advantage.',
     },
     phase: {
-      ready: 'Ready at the water',
+      ready: 'Choose your opening move',
       'player-turn': 'Your turn',
       caught: 'Catch landed',
       escaped: 'Fish escaped',
@@ -207,8 +188,8 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     },
     intentHint: {
       'steady-pull': 'The fish leans into the line with measured pressure.',
-      'power-dash': 'A fast run threatens distance and line tension.',
-      'deep-dive': 'A low run strains the line; RELEASE can bleed pressure.',
+      'power-dash': 'A fast run threatens progress and gear.',
+      'deep-dive': 'A low run strains the line; RELEASE can ease it.',
       thrash: 'A violent shake can damage the line.',
       recover: 'The fish catches its breath; PULL or REEL gets a clear window.',
     },
@@ -234,13 +215,6 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     checkRolls: 'Rolls',
     checkTotal: 'Total',
     difficulty: 'Target',
-    lineState: {
-      slack: 'Slack',
-      safe: 'Steady',
-      high: 'Rising',
-      danger: 'Danger',
-      critical: 'Break risk',
-    },
     fishEscaped: 'The fish slipped beyond reach.',
     lineBroken: 'The line snapped under pressure.',
     tryAgain: 'Prepare another cast',
@@ -335,7 +309,7 @@ export const UI_COPY: Record<Locale, UiCopy> = {
   th: {
     title: 'คลองหมู่บ้าน',
     chapter: 'บทที่',
-    chapterOne: 'สายแรกในสายน้ำ',
+    chapterOne: 'ดวลแรกใต้เงากอหญ้า',
     coins: 'เหรียญ',
     reputation: 'ชื่อเสียง',
     saveReady: 'บันทึกไว้ในอุปกรณ์แล้ว',
@@ -352,45 +326,33 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     story: 'เรื่องเล่าริมคลอง',
     chooseSpot: 'เลือกจุดตกปลา',
     area: 'จุดตกปลา',
-    localLegend: 'อ่านท่าทีของปลา ตอบโต้ให้ถูกจังหวะ และผ่อนสายเมื่อถึงเวลา',
-    sceneError: 'ไม่สามารถเริ่มฉากคลองได้ แต่ยังใช้ปุ่มตกปลาด้านล่างได้',
-    preparation: 'เตรียมสายเบ็ด',
-    preparationHint: 'เลือกจุดและเหยื่อ คันเบ็ดกับรอกจะกำหนดวิธีตอบโต้ของคุณ',
+    localLegend: 'อ่านท่าทีปลา ใช้ 2 แอ็กชันต่อเทิร์น แล้วรับมือจังหวะสวนกลับ',
+    sceneError: 'โหลดภาพสนามรบไม่ได้ แต่ยังใช้การ์ดยุทธวิธีได้ตามปกติ',
+    preparation: 'เลือกจังหวะเปิดเกม',
+    preparationHint: 'เลือกจุดกับเหยื่อ แล้วเหวี่ยงเบ็ด การ์ดแต่ละใบใช้ 1 AP',
     fight: 'ดวลเชิงกลยุทธ์',
     turn: 'เทิร์น',
     actionPoints: 'แต้มแอ็กชัน',
     intent: 'ท่าทีของปลา',
-    distance: 'ระยะห่าง',
-    distanceRisk: 'เสี่ยงหลุดหนี',
-    tension: 'แรงตึงสาย',
-    stamina: 'แรงของปลา',
-    lineDurability: 'ความทนของสาย',
-    cast: 'เหวี่ยงเบ็ดและเริ่มดวล',
+    cast: 'เหวี่ยงเบ็ดเพื่อเริ่มดวล',
     reel: 'กรอ',
     pull: 'ดึง',
     release: 'ผ่อนสาย',
     brace: 'ประคองสาย',
     observe: 'สังเกต',
     actionHint: {
-      reel: 'ค่อย ๆ ดึงระยะเข้ามา แต่แรงตึงจะเพิ่มขึ้น',
-      pull: 'ลดแรงของปลาได้เร็ว แต่เพิ่มแรงตึงมากกว่า',
-      release: 'ลดแรงตึง แลกกับการเสียระยะ',
+      reel: 'ค่อย ๆ ดึงปลาเข้ามา พร้อมสะสมแรงกดดัน',
+      pull: 'ทำให้ปลาอ่อนแรงเร็ว แลกกับแรงกดดันที่สูงขึ้น',
+      release: 'ผ่อนแรงกดดัน แลกกับการเสียความคืบหน้า',
       brace: 'รับท่าพุ่งและลดแรงโต้กลับของปลา',
       observe: 'อ่านท่าที หากสำเร็จจะบันทึกความรู้และช่วยแอ็กชันถัดไป',
     },
     firstEncounter: {
-      castHint: 'เหวี่ยงเบ็ดเพื่อเริ่มดวลครั้งแรก อ่านท่าทีปลา แล้วเลือกวิธีตอบโต้',
-      turnHint: 'รอบละ 2 แต้ม ปลาโต้ตอบเมื่อแต้มหมด ได้เปรียบคือจังหวะเข้าคู่ ส่วนเสียเปรียบเตือนว่าแอ็กชันสวนทาง',
-      role: {
-        reel: 'ลดระยะ แต่ตึงสายเพิ่ม',
-        pull: 'ลดแรงปลา แต่ตึงสายเพิ่ม',
-        release: 'ลดแรงตึง แต่เสียระยะ',
-        brace: 'รับแรงพุ่ง',
-        observe: 'อ่านท่าที',
-      },
+      castHint: 'เหวี่ยงเบ็ดเพื่อเริ่มดวลครั้งแรก อ่านท่าทีปลา แล้วเลือกการ์ดสวนกลับ',
+      turnHint: 'การ์ดแต่ละใบใช้ 1 AP เล่น 2 ใบแล้วปลาจะตอบโต้ จับคู่กับท่าทีปลาเพื่อได้เปรียบ',
     },
     phase: {
-      ready: 'พร้อมริมคลอง',
+      ready: 'เลือกท่าเปิดเกม',
       'player-turn': 'ตาคุณแล้ว',
       caught: 'จับปลาได้แล้ว',
       escaped: 'ปลาหลุดหนีไป',
@@ -433,13 +395,6 @@ export const UI_COPY: Record<Locale, UiCopy> = {
     checkRolls: 'แต้มทอย',
     checkTotal: 'รวม',
     difficulty: 'เป้าหมาย',
-    lineState: {
-      slack: 'สายหย่อน',
-      safe: 'สายยังนิ่ง',
-      high: 'แรงตึงสูงขึ้น',
-      danger: 'อันตราย',
-      critical: 'เสี่ยงขาดทันที',
-    },
     fishEscaped: 'ปลาหนีออกไปไกลเกินเอื้อม',
     lineBroken: 'สายขาดเพราะรับแรงไม่ไหว',
     tryAgain: 'เตรียมเหวี่ยงอีกครั้ง',

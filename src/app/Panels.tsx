@@ -4,7 +4,7 @@ import type { FishDefinition, GearCategory } from '../content/types';
 import type { GearEffects } from '../game/core/fishing/types';
 import { previewTurnFishingAction } from '../game/core/fishing/turn-engine';
 import { toTurnFishProfile, toTurnGearStats } from '../game/core/fishing/turn-adapter';
-import type { TurnFishingAction } from '../game/core/fishing/turn-types';
+import type { TurnFishingAction, TurnFishingSession } from '../game/core/fishing/turn-types';
 import { getActiveFish, getEquippedGearItems, hasCaughtKing, useGameStore } from '../game/state/game-store';
 import type { GameTab } from '../game/state/game-store';
 import { unlockFishingAudio } from './audio';
@@ -70,6 +70,65 @@ function FishArtworkImage({
   );
 }
 
+function TacticCards({
+  copy,
+  session,
+  fishProfile,
+  gearStats,
+  onAction,
+}: {
+  copy: UiCopy;
+  session: TurnFishingSession | null;
+  fishProfile: ReturnType<typeof toTurnFishProfile> | null;
+  gearStats: ReturnType<typeof toTurnGearStats>;
+  onAction: (action: TurnFishingAction) => void;
+}) {
+  return (
+    <div className="fight-actions" role="group" aria-label={copy.fight}>
+      {FIGHT_ACTIONS.map((action) => {
+        const preview = session && fishProfile
+          ? previewTurnFishingAction(session, action, fishProfile, gearStats)
+          : null;
+        const matchup = preview?.mode
+          ? copy.mode[preview.mode]
+          : preview
+            ? copy.automatic
+            : copy.phase.ready;
+        return (
+          <button
+            className={`action-button action-button--${action} liquid-pane liquid-pane--interactive liquid-pane--tactic liquid-pane--${action}`}
+            data-matchup={preview?.mode ?? (preview ? 'automatic' : 'unavailable')}
+            key={action}
+            onClick={() => onAction(action)}
+            disabled={!session || !fishProfile || session.ap < 1}
+            aria-label={`${copy[action]}. 1 ${copy.actionPoints}. ${matchup}. ${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
+            title={`${copy.actionHint[action]} ${preview?.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
+          >
+            <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
+            <span className="action-card__head">
+              <img className="action-icon" src={`/theme_games/action-icon-${action}.webp`} alt="" />
+              <span className="action-card__cost"><strong>1</strong><span>{copy.actionPoints}</span></span>
+            </span>
+            <span className="action-button__top">
+              <strong>{copy[action]}</strong>
+              {preview && (
+                <span className={`action-matchup action-matchup--${preview.mode ?? 'automatic'}`}>
+                  {matchup}
+                </span>
+              )}
+            </span>
+            <span className="action-button__hint">{copy.actionHint[action]}</span>
+            {preview?.modeReason && (
+              <span className="action-button__reason">{copy.modeReason[preview.modeReason]}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+
 export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
   const session = useGameStore((state) => state.session);
   const selectedSpotId = useGameStore((state) => state.selectedSpotId);
@@ -97,19 +156,6 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
   const phase = session?.phase ?? 'ready';
   const inDuel = phase === 'player-turn';
   const canChangeSpot = phase !== 'player-turn' && phase !== 'caught';
-  const tension = Math.round(session?.tension ?? 0);
-  const stamina = session && session.maxStamina > 0
-    ? Math.max(0, Math.round((session.stamina / session.maxStamina) * 100))
-    : 0;
-  const distance = session ? Math.round((session.distance / session.maxDistance) * 100) : 0;
-  const durability = session && session.maxLineDurability > 0
-    ? Math.max(0, Math.round((session.lineDurability / session.maxLineDurability) * 100))
-    : 100;
-  const lineState = tension >= 92 ? 'critical'
-    : tension >= 70 ? 'danger'
-      : tension >= 45 ? 'high'
-        : tension >= 15 ? 'safe'
-          : 'slack';
   const result = session?.result;
   const catchRecord = result ? fishCollection[result.fishId] : undefined;
   const firstCatch = catchRecord?.caught === 1;
@@ -141,6 +187,24 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
 
   return (
     <div className="fishing-layout">
+      <div className="spot-gallery" role="group" aria-label={copy.chooseSpot}>
+        {FISHING_SPOTS.map((spot) => {
+          const unlocked = unlockedSpotIds.includes(spot.id);
+          return (
+            <button
+              className={`spot-gallery__item${spot.id === selectedSpotId ? ' is-current' : ''}`}
+              key={spot.id}
+              type="button"
+              disabled={!canChangeSpot || !unlocked}
+              aria-pressed={spot.id === selectedSpotId}
+              onClick={() => selectSpot(spot.id)}
+            >
+              <img src={`/theme_games/spot-${spot.id}.webp`} alt="" />
+              <span>{localize(spot.name, locale)}{!unlocked && ` · ${copy.locked}`}</span>
+            </button>
+          );
+        })}
+      </div>
       <section className="fishing-field" aria-labelledby="field-title">
         <div className="field-heading">
           <div>
@@ -177,12 +241,33 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             fishRarity={fish?.rarity ?? null}
             phase={phase}
             bossPhase={session?.bossPhase ?? null}
-            lastCheckOutcome={session?.lastCheck?.outcome ?? null}
             reducedMotion={reducedMotion}
             spotName={localize(selectedSpot.name, locale)}
-            tension={session?.tension ?? 0}
           />
-          <div className="scene-callout" aria-live="polite" aria-atomic="true">
+          <aside className="scene-intel" aria-label={copy.area}>
+            <h3>{copy.area}</h3>
+            <p>{localize(selectedSpot.description, locale)}</p>
+            <div className="scene-intel__risk">
+              <span>{locale === 'th' ? 'ระดับความยาก' : 'Difficulty'}</span>
+              <strong aria-label={`${Math.ceil(selectedSpot.risk * 5)} / 5`}>
+                {'★'.repeat(Math.ceil(selectedSpot.risk * 5))}{'☆'.repeat(5 - Math.ceil(selectedSpot.risk * 5))}
+              </strong>
+            </div>
+            <div className="scene-intel__fish">
+              <span>{locale === 'th' ? 'ปลาที่พบ' : 'Local fish'}</span>
+              <div>
+                {selectedSpot.fishIds.map((id) => {
+                  const localFish = FISH.find((item) => item.id === id);
+                  return localFish ? (
+                    <span key={id} title={localize(localFish.name, locale)}>
+                      <FishArtworkImage fish={localFish} locale={locale} className="scene-intel__art" />
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          </aside>
+          <div className="scene-callout liquid-pane liquid-pane--hud" aria-live="polite" aria-atomic="true">
             {session && fish ? (
               <>
                 <div className="scene-callout__meta">
@@ -204,7 +289,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             )}
           </div>
           {inDuel && session && (
-            <div className="turn-counter" aria-label={`${copy.turn} ${session.turn}, ${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
+            <div className="turn-counter liquid-pane liquid-pane--hud" aria-label={`${copy.turn} ${session.turn}, ${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
               <span>{copy.turn} <strong>{numberText(session.turn, locale)}</strong></span>
               <span className="turn-counter__ap">
                 <span>{copy.actionPoints}</span>
@@ -212,98 +297,55 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               </span>
             </div>
           )}
-          <span className="scene-location">{localize(selectedSpot.name, locale)}</span>
+          <span className="scene-location liquid-pane liquid-pane--pill">{localize(selectedSpot.name, locale)}</span>
           {phase === 'ready' && (
             <div className="scene-ready-action">
               {showFirstCastGuidance && (
-                <p className="scene-ready-action__hint" role="note">{copy.firstEncounter.castHint}</p>
+                <p className="scene-ready-action__hint liquid-pane liquid-pane--pill liquid-pane--warm" role="note">{copy.firstEncounter.castHint}</p>
               )}
-              <button className="action-button action-button--cast" onClick={() => markSoundGesture(cast)}>
+              <button className="action-button action-button--cast liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={() => markSoundGesture(cast)}>
+                <img className="cast-icon" src="/theme_games/nav-icon-fishing.webp" alt="" />
                 {copy.cast}
               </button>
             </div>
           )}
         </div>
 
-        {session && fish && (
-          <section className="water-readouts" aria-label={copy.fight}>
-            <div className={`readout readout--${lineState}`}>
-              <div className="readout__heading">
-                <span>{copy.tension}</span>
-                <strong>{numberText(tension, locale)}%</strong>
-              </div>
-              <meter min="0" max="100" value={tension} aria-label={copy.tension} />
-              <span className="readout__state">{copy.lineState[lineState]}</span>
+
+        {phase === 'ready' && (
+          <section className="action-dock action-dock--preview liquid-pane liquid-pane--table" data-phase={phase} aria-label={copy.fight}>
+            <div className="tactic-preview__heading">
+              <h3>{copy.fight}</h3>
+              <p>{copy.firstEncounter.turnHint}</p>
             </div>
-            <div className="readout readout--stamina">
-              <div className="readout__heading">
-                <span>{copy.stamina}</span>
-                <strong>{numberText(stamina, locale)}%</strong>
-              </div>
-              <meter min="0" max="100" value={stamina} aria-label={copy.stamina} />
-              <span className="readout__state">{localize(fish.name, locale)}</span>
-            </div>
-            <div className="readout readout--distance">
-              <div className="readout__heading">
-                <span>{copy.distance}</span>
-                <strong>{numberText(distance, locale)}%</strong>
-              </div>
-              <meter min="0" max="100" value={distance} aria-label={copy.distance} />
-              <span className="readout__state">{copy.distanceRisk}</span>
-            </div>
-            <div className="readout readout--durability">
-              <div className="readout__heading">
-                <span>{copy.lineDurability}</span>
-                <strong>{numberText(durability, locale)}%</strong>
-              </div>
-              <meter min="0" max="100" value={durability} aria-label={copy.lineDurability} />
-              <span className="readout__state">{copy.lineState[durability <= 25 ? 'critical' : 'safe']}</span>
-            </div>
+            <TacticCards
+              copy={copy}
+              session={null}
+              fishProfile={null}
+              gearStats={gearStats}
+              onAction={runAction}
+            />
           </section>
         )}
-
-        {phase !== 'ready' && <section className="action-dock" aria-label={copy.fight}>
+        {phase !== 'ready' && <section className="action-dock liquid-pane liquid-pane--table" aria-label={copy.fight}>
           <p className="session-status" role="status" aria-live="polite" aria-atomic="true">
             {copy.phase[phase]}
           </p>
           {inDuel && session && fishProfile && (
             <>
               {showFirstTurnGuidance && (
-                <p className="first-encounter-guide" role="note">{copy.firstEncounter.turnHint}</p>
+                <p className="first-encounter-guide liquid-pane liquid-pane--warm" role="note">{copy.firstEncounter.turnHint}</p>
               )}
-              <div className="fight-actions" aria-label={copy.fight}>
-                {FIGHT_ACTIONS.map((action) => {
-                  const preview = previewTurnFishingAction(session, action, fishProfile, gearStats);
-                  return (
-                    <button
-                      className={`action-button action-button--${action}`}
-                      key={action}
-                      onClick={() => runAction(action)}
-                      disabled={session.ap < 1}
-                      aria-label={`${copy[action]}. ${preview.mode ? copy.mode[preview.mode] : copy.automatic}. ${copy.actionHint[action]}${preview.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
-                      title={`${copy.actionHint[action]} ${preview.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
-                    >
-                      <span className="action-button__top">
-                        <span className="action-button__signal" aria-hidden="true" />
-                        <strong>{copy[action]}</strong>
-                        <span className={`action-matchup action-matchup--${preview.mode ?? 'automatic'}`}>
-                          {preview.mode ? copy.mode[preview.mode] : copy.automatic}
-                        </span>
-                      </span>
-                      <span className="action-button__hint">{copy.actionHint[action]}</span>
-                      {showFirstTurnGuidance && (
-                        <span className="action-button__role">{copy.firstEncounter.role[action]}</span>
-                      )}
-                      {preview.modeReason && (
-                        <span className="action-button__reason">{copy.modeReason[preview.modeReason]}</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <TacticCards
+                copy={copy}
+                session={session}
+                fishProfile={fishProfile}
+                gearStats={gearStats}
+                onAction={runAction}
+              />
               {session.lastAction && (
                 <div
-                  className={`last-check ${session.lastCheck ? `last-check--${session.lastCheck.outcome}` : 'last-check--no-roll'}`}
+                  className={`last-check liquid-pane liquid-pane--readout ${session.lastCheck ? `last-check--${session.lastCheck.outcome}` : 'last-check--no-roll'}`}
                   aria-live="polite"
                   aria-atomic="true"
                 >
@@ -339,17 +381,17 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           {(phase === 'escaped' || phase === 'line-break') && (
             <div className="outcome-line">
               <p>{phase === 'escaped' ? copy.fishEscaped : copy.lineBroken}</p>
-              <button className="action-button action-button--cast" onClick={restartSession}>{copy.tryAgain}</button>
+              <button className="action-button action-button--cast liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={restartSession}>{copy.tryAgain}</button>
             </div>
           )}
           {phase === 'caught' && result && fish && (
             <section
-              className={`catch-reveal catch-reveal--${fish.rarity}`}
+              className={`catch-reveal catch-reveal--${fish.rarity} liquid-pane liquid-pane--reveal`}
               aria-labelledby="catch-title"
             >
               <div className="catch-reveal__hero">
                 <FishArtworkImage fish={fish} locale={locale} className="catch-reveal__artwork" loading="eager" />
-                <div className="catch-reveal__headline">
+                <div className="catch-reveal__headline liquid-pane liquid-pane--readout">
                   <div className="catch-reveal__eyebrow">
                     <span>{copy.caught}</span>
                     {firstCatch && <span className="catch-reveal__badge">{copy.firstCatch}</span>}
@@ -387,10 +429,10 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               </div>
 
               <div className="catch-reveal__actions">
-                <button className="action-button action-button--sell" onClick={() => settleCatch('sell')}>
+                <button className="action-button action-button--sell liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={() => settleCatch('sell')}>
                   {copy.sellReward}: {numberText(fish.sellValue, locale)} {copy.coins}
                 </button>
-                <button className="action-button action-button--keep" onClick={() => settleCatch('keep')}>
+                <button className="action-button action-button--keep liquid-pane liquid-pane--interactive" onClick={() => settleCatch('keep')}>
                   {copy.keep}
                 </button>
               </div>
@@ -400,7 +442,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
       </section>
 
       <aside className="preparation-rail" aria-label={copy.setup}>
-        <section className="setup-card">
+        <section className="setup-card liquid-pane liquid-pane--setup">
           <header className="setup-card__heading">
             <div>
               <h2>{copy.setup}</h2>
@@ -431,7 +473,8 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
           </div>
           <ul className="setup-gear">
             {getEquippedGearItems({ equippedGear }).map((item) => (
-              <li key={item.id}>
+              <li className={`setup-gear__${item.category}`} key={item.id}>
+                <img src={`/theme_games/gear-${item.category}.webp`} alt="" />
                 <span>{copy.category[item.category]}</span>
                 <strong>{localize(item.name, locale)}</strong>
               </li>
@@ -473,13 +516,12 @@ export function CollectionPanel({ copy, locale }: { copy: UiCopy; locale: Locale
 
   return (
     <section className="archive-panel collection-panel" aria-labelledby="collection-title">
-      <header className="collection-hero">
+      <header className="collection-hero liquid-pane">
         <div className="collection-hero__heading">
-          <p className="collection-hero__chapter">{copy.chapterOne}</p>
           <h2 id="collection-title">{copy.collectionTitle}</h2>
           <p>{copy.collectionDescription}</p>
         </div>
-        <div className="collection-progress" aria-label={`${copy.collectionProgress}: ${unique} / ${FISH.length}`}>
+        <div className="collection-progress liquid-pane liquid-pane--readout" aria-label={`${copy.collectionProgress}: ${unique} / ${FISH.length}`}>
           <div className="collection-progress__label">
             <span>{copy.collectionProgress}</span>
             <strong>{numberText(unique, locale)} <small>/ {numberText(FISH.length, locale)}</small></strong>
@@ -498,7 +540,7 @@ export function CollectionPanel({ copy, locale }: { copy: UiCopy; locale: Locale
           .filter((bait) => bait !== undefined);
 
         return (
-          <article className="collection-featured" data-rarity={fish.rarity} aria-labelledby="featured-fish-title">
+          <article className="collection-featured liquid-pane" data-rarity={fish.rarity} aria-labelledby="featured-fish-title">
             <div className="collection-featured__art-wrap">
               <FishArtworkImage fish={fish} locale={locale} className="collection-featured__artwork" loading="eager" />
               <span className="collection-featured__stamp">{copy.discovered}</span>
@@ -546,7 +588,7 @@ export function CollectionPanel({ copy, locale }: { copy: UiCopy; locale: Locale
       <ol className="fish-list fish-list--journal" aria-label={copy.collectionTitle}>
         {fishEntries.map(({ fish, fishNumber, discovered }) => {
           return (
-            <li className={`fish-entry ${discovered ? 'fish-entry--known' : 'fish-entry--unknown'}`} key={fish.id} data-rarity={discovered ? fish.rarity : undefined}>
+            <li className={`fish-entry liquid-pane liquid-pane--interactive ${discovered ? 'fish-entry--known' : 'fish-entry--unknown'}`} key={fish.id} data-rarity={discovered ? fish.rarity : undefined}>
               {discovered ? (
                 <FishArtworkImage fish={fish} locale={locale} className="fish-entry__artwork" />
               ) : (
@@ -607,7 +649,7 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
         {GEAR_CATEGORIES.map((gearCategory) => (
           <button
             aria-pressed={category === gearCategory}
-            className={category === gearCategory ? 'category-nav__item is-current' : 'category-nav__item'}
+            className={`category-nav__item liquid-pane liquid-pane--interactive liquid-pane--pill${category === gearCategory ? ' is-current' : ''}`}
             key={gearCategory}
             onClick={() => setCategory(gearCategory)}
           >
@@ -616,8 +658,8 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
         ))}
       </nav>
       {currentItem && (
-        <section className="gear-featured" aria-labelledby="equipped-gear-title">
-          <div className="gear-featured__mark"><span className={`gear-mark gear-mark--${currentItem.category}`} aria-hidden="true" /></div>
+        <section className="gear-featured liquid-pane" aria-labelledby="equipped-gear-title">
+          <div className="gear-featured__mark"><img className="gear-art-icon" src={`/theme_games/gear-${currentItem.category}.webp`} alt="" /></div>
           <div className="gear-featured__details">
             <p className="gear-section-label">{copy.equippedNow}</p>
             <div className="gear-entry__heading">
@@ -645,8 +687,8 @@ export function GearPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
           const isEquipped = equippedGear[item.category] === item.id;
           const locked = item.unlockAfter !== undefined && !seenStoryEvents.includes(item.unlockAfter);
           return (
-            <li className="gear-entry" key={item.id}>
-              <span className={`gear-mark gear-mark--${item.category}`} aria-hidden="true" />
+            <li className="gear-entry liquid-pane liquid-pane--interactive" key={item.id}>
+              <img className="gear-art-icon" src={`/theme_games/gear-${item.category}.webp`} alt="" />
               <div className="gear-entry__details">
                 <div className="gear-entry__heading">
                   <h3>{localize(item.name, locale)}</h3>
@@ -697,7 +739,7 @@ export function StoryPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
         <h2 id="story-title">{copy.storyTitle}</h2>
         <p>{copy.storyDescription}</p>
       </header>
-      <section className="story-goals" aria-label={copy.chapterOne}>
+      <section className="story-goals liquid-pane liquid-pane--readout" aria-label={copy.chapterOne}>
         <div className="story-goal">
           <div className="story-goal__label"><span>{copy.fishProgress}</span><strong>{numberText(Math.min(uniqueFish, 4), locale)} / 4</strong></div>
           <progress max="4" value={Math.min(uniqueFish, 4)} aria-label={copy.fishProgress} />
@@ -712,7 +754,7 @@ export function StoryPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
         </div>
       </section>
       {kingCaught && (
-        <section className="scout-invitation" aria-labelledby="scout-title">
+        <section className="scout-invitation liquid-pane liquid-pane--warm" aria-labelledby="scout-title">
           <h3 id="scout-title">{copy.chapterComplete}</h3>
           <p>{copy.chapterCompleteBody}</p>
         </section>
@@ -721,7 +763,7 @@ export function StoryPanel({ copy, locale }: { copy: UiCopy; locale: Locale }) {
         {visibleEvents.map((event) => (
           <li className="story-entry" key={event.id}>
             <div className="story-entry__marker" aria-hidden="true" />
-            <article>
+            <article className="liquid-pane">
               <h3>{localize(event.title, locale)}</h3>
               <p>{localize(event.body, locale)}</p>
               {event.npc && <p className="story-entry__speaker">{localize(event.npc, locale)}</p>}

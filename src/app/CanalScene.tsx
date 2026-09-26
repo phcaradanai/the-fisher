@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { Rarity } from '../content/types';
-import type { CheckOutcome, TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
+import type { TurnCombatEvent, TurnCombatPhase, TurnFishingAction, FishIntentType } from '../game/core/fishing/turn-types';
 
 type CanalSceneProps = {
   artwork: string | null;
@@ -15,15 +15,12 @@ type CanalSceneProps = {
   fishRarity: Rarity | null;
   phase: TurnCombatPhase;
   bossPhase: 1 | 2 | 3 | null;
-  lastCheckOutcome: CheckOutcome | null;
   reducedMotion: boolean;
   spotName: string;
-  tension: number;
 };
 
 const SCENE_WIDTH = 1200;
 const SCENE_HEIGHT = 800;
-const WATERLINE_Y = 360;
 const VILLAGE_CANAL_BACKGROUND = '/images/background_art_a/คลองหมอกจันทร์กับเงาอสูรใต้น้ำ.png';
 
 function coverSprite(sprite: Sprite, texture: Texture): number {
@@ -45,10 +42,8 @@ export function CanalScene({
   fishRarity,
   phase,
   bossPhase,
-  lastCheckOutcome,
   reducedMotion,
   spotName,
-  tension,
 }: CanalSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const backgroundSpriteRef = useRef<Sprite | null>(null);
@@ -66,9 +61,7 @@ export function CanalScene({
     fishRarity,
     phase,
     bossPhase,
-    lastCheckOutcome,
     reducedMotion,
-    tension,
   });
   const [sceneError, setSceneError] = useState(false);
 
@@ -123,11 +116,9 @@ export function CanalScene({
       fishRarity,
       phase,
       bossPhase,
-      lastCheckOutcome,
       reducedMotion,
-      tension,
     };
-  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, lastCheckOutcome, reducedMotion, tension]);
+  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion]);
 
   useEffect(() => {
     loadArtwork(artwork);
@@ -142,8 +133,6 @@ export function CanalScene({
     let initialized = false;
     let elapsed = 0;
     let feedbackPulse = 0;
-    let actionPulse = 0;
-    let actionKind: TurnFishingAction | null = null;
     let lastEventSequence = sceneState.current.eventSequence;
     let resizeObserver: ResizeObserver | undefined;
 
@@ -152,7 +141,7 @@ export function CanalScene({
         await app.init({
           antialias: true,
           autoDensity: true,
-          backgroundColor: 0x082f37,
+          backgroundColor: 0x020a10,
           preference: 'webgl',
           resolution: Math.min(window.devicePixelRatio || 1, 2),
           resizeTo: host,
@@ -323,39 +312,6 @@ export function CanalScene({
           .rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
           .fill({ color: 0x071a2a, alpha: 0.095 });
 
-        const lineShadow = new Graphics();
-        const line = new Graphics();
-        const actionWake = new Graphics()
-          .ellipse(0, 0, 72, 13)
-          .stroke({ color: 0xd9e5b4, width: 3, alpha: 0.75 });
-        const actionSplash = new Graphics()
-          .moveTo(-34, 8).lineTo(-18, -18).lineTo(-7, 6)
-          .moveTo(7, 6).lineTo(18, -22).lineTo(34, 8)
-          .stroke({ color: 0xf0d69a, width: 3, alpha: 0.8 });
-        const actionSignal = new Graphics()
-          .circle(0, 0, 32)
-          .stroke({ color: 0xf07855, width: 3, alpha: 0.7 });
-        const bobber = new Container();
-        const bobberGlow = new Graphics()
-          .ellipse(0, 11, 33, 15)
-          .fill({ color: 0xf07855, alpha: 0.1 });
-        const bobberBody = new Graphics()
-          .ellipse(0, 0, 13, 27)
-          .fill({ color: 0xf07855 })
-          .rect(-12, -5, 24, 10)
-          .fill({ color: 0xf0d69a })
-          .ellipse(0, -25, 5, 6)
-          .fill({ color: 0x423a35 })
-          .ellipse(0, 15, 8, 9)
-          .fill({ color: 0xb94731, alpha: 0.62 });
-        bobber.addChild(bobberGlow, bobberBody);
-
-        const ripples = [
-          new Graphics().ellipse(0, 0, 58, 10).stroke({ color: 0xb5ceb0, width: 2, alpha: 0.54 }),
-          new Graphics().ellipse(0, 0, 40, 7).stroke({ color: 0xd4d6a7, width: 1.5, alpha: 0.58 }),
-          new Graphics().ellipse(0, 0, 23, 4).stroke({ color: 0xe4dfb3, width: 1, alpha: 0.5 }),
-          new Graphics().ellipse(0, 0, 76, 13).stroke({ color: 0x8db9a8, width: 1, alpha: 0.22 }),
-        ];
         const sparklePoints = [
           { x: 412, y: 462 },
           { x: 650, y: 506 },
@@ -383,13 +339,6 @@ export function CanalScene({
           artworkAura,
           artworkVeil,
           ...surfaceSparkles,
-          ...ripples,
-          lineShadow,
-          line,
-          actionWake,
-          actionSplash,
-          actionSignal,
-          bobber,
           foregroundFrame,
         );
         app.stage.addChild(world);
@@ -397,7 +346,7 @@ export function CanalScene({
         loadArtwork(sceneState.current.artwork);
 
         const resizeScene = () => {
-          const scale = Math.min(app.screen.width / SCENE_WIDTH, app.screen.height / SCENE_HEIGHT);
+          const scale = Math.max(app.screen.width / SCENE_WIDTH, app.screen.height / SCENE_HEIGHT);
           world.scale.set(scale);
           world.position.set((app.screen.width - SCENE_WIDTH * scale) / 2, (app.screen.height - SCENE_HEIGHT * scale) / 2);
         };
@@ -412,14 +361,10 @@ export function CanalScene({
           if (state.eventSequence !== lastEventSequence) {
             lastEventSequence = state.eventSequence;
             feedbackPulse = motion ? 1 : 0;
-            actionPulse = motion ? 1 : 0;
-            actionKind = state.fishAction;
           }
           if (motion) feedbackPulse = Math.max(0, feedbackPulse - ticker.deltaMS / 310);
-          if (motion) actionPulse = Math.max(0, actionPulse - ticker.deltaMS / 280);
 
-          const active = state.phase === 'player-turn';
-          const encounterVisible = active || state.phase === 'caught';
+          const encounterVisible = state.phase === 'player-turn' || state.phase === 'caught';
           const backgroundReady = backgroundSprite.texture !== Texture.EMPTY;
           const artReady = sceneArtwork.texture !== Texture.EMPTY;
           const fishArtworkVisible = encounterVisible && artReady;
@@ -460,84 +405,6 @@ export function CanalScene({
             sceneArtwork.rotation = artTilt + (state.fishIntent === 'thrash' && motion ? Math.sin(elapsed * 12) * 0.012 : 0);
           }
 
-          const floatX = active
-            ? 520 + (motion ? Math.sin(elapsed * 0.8) * 12 : 0) + (state.fishIntent === 'power-dash' ? -eventJolt * 13 : 0)
-            : 500;
-          const floatDepth = active && state.fishIntent === 'deep-dive'
-            ? 26
-            : active && state.fishIntent === 'power-dash'
-              ? -15
-              : state.phase === 'caught'
-                ? 30
-                : 0;
-          const floatY = WATERLINE_Y + 18 + floatDepth + (motion ? Math.sin(elapsed * (state.event === 'action-brace' ? 5 : 2)) * (active ? 4 : 1) : 0) + eventJolt * 7;
-          const floatRotation = active ? Math.min(state.tension, 100) * 0.0017 : 0;
-          bobber.visible = state.phase !== 'escaped' && state.phase !== 'line-break';
-          bobber.position.set(floatX, floatY);
-          bobber.rotation = floatRotation + (state.fishIntent === 'thrash' && motion ? Math.sin(elapsed * 12) * 0.12 : 0);
-          bobber.scale.set(1 + eventJolt * 0.12);
-          bobberGlow.alpha = 0.08 + (motion ? (Math.sin(elapsed * 2.2) + 1) * 0.025 : 0) + eventJolt * 0.18;
-
-          const lineVisible = encounterVisible;
-          line.visible = lineVisible;
-          lineShadow.visible = lineVisible;
-          if (lineVisible) {
-            const lineStartX = 220 - eventJolt * 3;
-            const lineStartY = 553 + eventJolt * 3;
-            const lineEndY = floatY - 23;
-            const curveTension = Math.min(state.tension, 100) * 0.4;
-            lineShadow
-              .clear()
-              .moveTo(lineStartX, lineStartY)
-              .bezierCurveTo(292, 445, 392, 410 + curveTension, floatX, lineEndY)
-              .stroke({ color: 0x041c26, width: 7, alpha: 0.26 });
-            line
-              .clear()
-              .moveTo(lineStartX, lineStartY)
-              .bezierCurveTo(292, 445, 392, 410 + curveTension, floatX, lineEndY)
-              .stroke({ color: state.tension > 70 ? 0xf07855 : 0xe8dfbd, width: 2.25, alpha: 0.96 });
-          }
-
-          const rippleY = floatY + 25;
-          const rippleBreath = motion ? 0.86 + ((Math.sin(elapsed * 1.25) + 1) / 2) * 0.35 : 1;
-          const rippleImpulse = 1 + eventJolt * 0.72;
-          for (let index = 0; index < ripples.length; index += 1) {
-            const ripple = ripples[index]!;
-            ripple.visible = bobber.visible;
-            ripple.position.set(floatX, rippleY);
-            ripple.scale.set(rippleBreath * rippleImpulse * (1 + index * 0.08));
-            ripple.alpha = (active ? 0.78 : 0.45) * (index === 3 ? 0.5 : 1) + eventJolt * (index === 0 ? 0.28 : 0.08);
-          }
-
-          const actionVisible = actionPulse > 0 && bobber.visible;
-          const actionStrength = actionPulse * actionPulse;
-          const outcomeTint = state.lastCheckOutcome === 'critical-failure' ? 0xff7666
-            : state.lastCheckOutcome === 'critical-success' ? 0xc0dfb1
-              : 0xf07855;
-          const criticalOutcome = state.lastCheckOutcome === 'critical-failure' || state.lastCheckOutcome === 'critical-success';
-          actionWake.visible = actionVisible && (actionKind === 'reel' || actionKind === 'pull');
-          actionSplash.visible = actionVisible && (actionKind === 'release' || actionKind === 'brace');
-          actionSignal.visible = actionVisible && (actionKind === 'observe' || criticalOutcome);
-          actionWake.tint = outcomeTint;
-          actionSplash.tint = outcomeTint;
-          actionSignal.tint = outcomeTint;
-          actionWake.position.set(floatX, rippleY + 2);
-          actionWake.rotation = actionKind === 'pull' ? -0.42 : 0;
-          actionWake.scale.set(
-            actionKind === 'pull' ? 0.72 + actionPulse * 0.2 : 1 + (1 - actionPulse) * 0.7,
-            actionKind === 'pull' ? 1.35 - actionPulse * 0.25 : 1 - actionStrength * 0.25,
-          );
-          actionWake.alpha = actionStrength;
-          actionSplash.position.set(floatX, rippleY - 2);
-          actionSplash.rotation = actionKind === 'brace' ? Math.PI / 2 : 0;
-          actionSplash.scale.set(
-            actionKind === 'brace' ? 0.62 + actionPulse * 0.18 : 1.18 - actionPulse * 0.2,
-            actionKind === 'brace' ? 1.25 - actionPulse * 0.3 : 0.72 + actionPulse * 0.25,
-          );
-          actionSplash.alpha = actionStrength;
-          actionSignal.position.set(floatX, floatY - 3);
-          actionSignal.scale.set(criticalOutcome ? 1.15 + (1 - actionPulse) * 0.85 : 1 + (1 - actionPulse) * 0.65);
-          actionSignal.alpha = actionStrength;
 
           for (let index = 0; index < mistBands.length; index += 1) {
             const mist = mistBands[index]!;

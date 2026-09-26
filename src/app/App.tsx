@@ -6,6 +6,7 @@ import { UI_COPY } from './copy';
 import type { Locale } from './copy';
 import { PANEL_BY_TAB } from './Panels';
 import './styles.css';
+import './fantasy-canal.css';
 
 const TABS: GameTab[] = ['fishing', 'collection', 'gear', 'story'];
 const LOCALES: Locale[] = ['th', 'en'];
@@ -45,9 +46,9 @@ export function App() {
 
   return (
     <div className="game-shell" data-reduced-motion={reducedMotion}>
-      <header className="masthead">
+      <header className="masthead liquid-pane liquid-pane--bar">
         <div className="masthead__brand">
-          <span className="brand-float" aria-hidden="true"><span /></span>
+          <img className="brand-mark" src="/theme_games/brand-mark.webp" alt="" />
           <div>
             <h1>{copy.title}</h1>
             <p>{copy.chapter} 1 <span aria-hidden="true">·</span> {copy.chapterOne}</p>
@@ -82,7 +83,7 @@ export function App() {
         </div>
       </header>
 
-      <nav className="section-nav" aria-label={copy.navigation}>
+      <nav className="section-nav liquid-pane liquid-pane--bar" aria-label={copy.navigation}>
         {TABS.map((tab) => (
           <button
             aria-current={activeTab === tab ? 'page' : undefined}
@@ -90,14 +91,14 @@ export function App() {
             key={tab}
             onClick={() => setTab(tab)}
           >
-            <span className={`nav-signal nav-signal--${tab}`} aria-hidden="true" />
+            <img className="nav-icon" src={`/theme_games/nav-icon-${tab}.webp`} alt="" />
             {copy[tab]}
           </button>
         ))}
       </nav>
 
       {notice && (
-        <div className="notice-line" role="status" aria-live="polite">
+        <div className="notice-line liquid-pane liquid-pane--alert" role="status" aria-live="polite">
           <p>{copy.notice[notice]}</p>
           <button onClick={dismissNotice}>{copy.dismiss}</button>
         </div>
@@ -107,7 +108,7 @@ export function App() {
         <ActivePanel copy={copy} locale={locale} />
       </main>
 
-      <footer className="game-footer">
+      <footer className="game-footer liquid-pane liquid-pane--bar">
         <p>{saveStatus === 'saved' ? copy.saveReady : copy.saveUnavailable}</p>
         <span className="save-indicator" aria-hidden="true" />
       </footer>
