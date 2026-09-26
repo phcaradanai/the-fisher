@@ -252,6 +252,7 @@
 
 /* Compact loadout: it should feel like tackle laid out on the edge of the scene. */
 .fishing-layout[data-phase='ready'] .setup-card {
+  position: relative;
   overflow: hidden;
   border-color: rgba(175, 213, 234, .21);
   background:
