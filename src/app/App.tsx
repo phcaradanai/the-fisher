@@ -8,6 +8,7 @@ import { presentationCombatEvent, useFishingPresentation } from './presentation'
 import { PANEL_BY_TAB } from './Panels';
 import './styles.css';
 import './fantasy-canal.css';
+import './competition-polish.css';
 
 const TABS: GameTab[] = ['fishing', 'collection', 'gear', 'story'];
 const LOCALES: Locale[] = ['th', 'en'];
