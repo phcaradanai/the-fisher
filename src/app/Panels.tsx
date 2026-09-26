@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FISH, FISHING_SPOTS, GEAR, STORY_EVENTS } from '../content';
 import type { FishDefinition, GearCategory } from '../content/types';
 import type { GearEffects } from '../game/core/fishing/types';
@@ -84,7 +84,7 @@ function TacticCards({
   onAction: (action: TurnFishingAction) => void;
 }) {
   return (
-    <div className="fight-actions" role="group" aria-label={copy.fight}>
+    <div className="fight-actions" role="group" aria-label={copy.fight} data-control-surface="tactical-actions">
       {FIGHT_ACTIONS.map((action) => {
         const preview = session && fishProfile
           ? previewTurnFishingAction(session, action, fishProfile, gearStats)
@@ -96,11 +96,14 @@ function TacticCards({
             : copy.phase.ready;
         return (
           <button
+            type="button"
             className={`action-button action-button--${action} liquid-pane liquid-pane--interactive liquid-pane--tactic liquid-pane--${action}`}
             data-matchup={preview?.mode ?? (preview ? 'automatic' : 'unavailable')}
+            data-action={action}
             key={action}
             onClick={() => onAction(action)}
             disabled={!session || !fishProfile || session.ap < 1}
+            aria-keyshortcuts={action === 'reel' ? '1' : action === 'pull' ? '2' : action === 'release' ? '3' : action === 'brace' ? '4' : '5'}
             aria-label={`${copy[action]}. 1 ${copy.actionPoints}. ${matchup}. ${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
             title={`${copy.actionHint[action]} ${preview?.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
           >
@@ -117,14 +120,85 @@ function TacticCards({
                 </span>
               )}
             </span>
-            <span className="action-button__hint">{copy.actionHint[action]}</span>
+            <span className="action-button__hint" data-detail="secondary">{copy.actionHint[action]}</span>
             {preview?.modeReason && (
-              <span className="action-button__reason">{copy.modeReason[preview.modeReason]}</span>
+              <span className="action-button__reason" data-detail="secondary">{copy.modeReason[preview.modeReason]}</span>
             )}
           </button>
         );
       })}
     </div>
+  );
+}
+
+function CombatVitals({
+  copy,
+  locale,
+  session,
+  fishName,
+}: {
+  copy: UiCopy;
+  locale: Locale;
+  session: TurnFishingSession;
+  fishName: string;
+}) {
+  const metrics = [
+    {
+      key: 'stamina',
+      label: locale === 'th' ? 'พลังปลา' : 'Fish stamina',
+      value: session.stamina,
+      max: session.maxStamina,
+      display: `${numberText(session.stamina, locale)} / ${numberText(session.maxStamina, locale)}`,
+      tone: 'stamina',
+    },
+    {
+      key: 'tension',
+      label: locale === 'th' ? 'แรงตึงสาย' : 'Line tension',
+      value: session.tension,
+      max: 100,
+      display: `${numberText(session.tension, locale)}%`,
+      tone: 'tension',
+    },
+    {
+      key: 'distance',
+      label: locale === 'th' ? 'ระยะจากฝั่ง' : 'Distance',
+      value: session.distance,
+      max: session.maxDistance,
+      display: `${numberText(session.distance, locale)} / ${numberText(session.maxDistance, locale)}`,
+      tone: 'distance',
+    },
+    {
+      key: 'line',
+      label: locale === 'th' ? 'ความทนสาย' : 'Line durability',
+      value: session.lineDurability,
+      max: session.maxLineDurability,
+      display: `${numberText(session.lineDurability, locale)} / ${numberText(session.maxLineDurability, locale)}`,
+      tone: 'line',
+    },
+  ] as const;
+
+  return (
+    <section className="combat-vitals" data-control-surface="combat-vitals" aria-label={`${fishName}: ${copy.fight}`}>
+      <div className="combat-vitals__identity">
+        <span className="combat-vitals__label">{copy.fight}</span>
+        <strong>{fishName}</strong>
+      </div>
+      <div className="combat-vitals__metrics">
+        {metrics.map((metric) => (
+          <div className={`combat-vital combat-vital--${metric.tone}`} key={metric.key} data-vital={metric.key}>
+            <div className="combat-vital__heading">
+              <span>{metric.label}</span>
+              <strong>{metric.display}</strong>
+            </div>
+            <progress
+              value={metric.value}
+              max={metric.max}
+              aria-label={metric.label}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -185,6 +259,22 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
     markSoundGesture(() => act(action));
   };
 
+  useEffect(() => {
+    if (!inDuel || !session || session.ap < 1) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat
+        || (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)))) return;
+      const index = Number(event.key) - 1;
+      if (index >= 0 && index < FIGHT_ACTIONS.length && event.key === String(index + 1)) {
+        event.preventDefault();
+        markSoundGesture(() => act(FIGHT_ACTIONS[index]!));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [act, inDuel, session]);
+
   return (
     <div className="fishing-layout">
       <div className="spot-gallery" role="group" aria-label={copy.chooseSpot}>
@@ -237,6 +327,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             eventSequence={session?.eventSequence ?? 0}
             fishAction={session?.lastAction ?? null}
             fishDistance={session?.distance ?? 0}
+            fishTension={session?.tension ?? 0}
             fishIntent={session?.currentIntent.type ?? null}
             fishRarity={fish?.rarity ?? null}
             phase={phase}
@@ -288,6 +379,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               </>
             )}
           </div>
+          {inDuel && session && fish && (
+            <CombatVitals
+              copy={copy}
+              locale={locale}
+              session={session}
+              fishName={localize(fish.name, locale)}
+            />
+          )}
           {inDuel && session && (
             <div className="turn-counter liquid-pane liquid-pane--hud" aria-label={`${copy.turn} ${session.turn}, ${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
               <span>{copy.turn} <strong>{numberText(session.turn, locale)}</strong></span>
@@ -313,8 +412,8 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
 
 
         {phase === 'ready' && (
-          <section className="action-dock action-dock--preview liquid-pane liquid-pane--table" data-phase={phase} aria-label={copy.fight}>
-            <div className="tactic-preview__heading">
+          <section className="action-dock action-dock--preview liquid-pane liquid-pane--table" data-phase={phase} data-control-surface="preparation-actions" aria-label={copy.fight}>
+            <div className="action-dock__header tactic-preview__heading">
               <h3>{copy.fight}</h3>
               <p>{copy.firstEncounter.turnHint}</p>
             </div>
@@ -327,10 +426,18 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             />
           </section>
         )}
-        {phase !== 'ready' && <section className="action-dock liquid-pane liquid-pane--table" aria-label={copy.fight}>
-          <p className="session-status" role="status" aria-live="polite" aria-atomic="true">
+        {phase !== 'ready' && <section className="action-dock liquid-pane liquid-pane--table" data-phase={phase} data-control-surface={inDuel ? 'combat-actions' : 'combat-outcome'} aria-label={copy.fight}>
+          <div className="action-dock__status-row">
+            <p className="session-status" role="status" aria-live="polite" aria-atomic="true">
             {copy.phase[phase]}
-          </p>
+            </p>
+            {inDuel && session && (
+              <span className="action-dock__ap" aria-label={`${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
+                <span>{copy.actionPoints}</span>
+                <strong>{numberText(session.ap, locale)} / {numberText(session.maxAp, locale)}</strong>
+              </span>
+            )}
+          </div>
           {inDuel && session && fishProfile && (
             <>
               {showFirstTurnGuidance && (
@@ -346,6 +453,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               {session.lastAction && (
                 <div
                   className={`last-check liquid-pane liquid-pane--readout ${session.lastCheck ? `last-check--${session.lastCheck.outcome}` : 'last-check--no-roll'}`}
+                  data-outcome={session.lastCheck?.outcome ?? 'no-roll'}
                   aria-live="polite"
                   aria-atomic="true"
                 >

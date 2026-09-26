@@ -11,6 +11,7 @@ type CanalSceneProps = {
   eventSequence: number;
   fishAction: TurnFishingAction | null;
   fishDistance: number;
+  fishTension: number;
   fishIntent: FishIntentType | null;
   fishRarity: Rarity | null;
   phase: TurnCombatPhase;
@@ -30,6 +31,29 @@ function coverSprite(sprite: Sprite, texture: Texture): number {
   return scale;
 }
 
+function drawLine(line: Graphics, startX: number, startY: number, endX: number, endY: number, tension: number, alpha = 1) {
+  const normalizedTension = Math.max(0, Math.min(1, tension / 100));
+  const sag = 22 - normalizedTension * 18;
+  line.clear()
+    .moveTo(startX, startY)
+    .quadraticCurveTo((startX + endX) / 2, (startY + endY) / 2 + sag, endX, endY)
+    .stroke({ color: normalizedTension > 0.78 ? 0xff9b82 : 0xd9f1df, width: 2 + normalizedTension * 1.8, alpha });
+}
+
+function drawWake(wake: Graphics, x: number, y: number, intent: FishIntentType | null, strength: number, elapsed: number) {
+  const direction = intent === 'power-dash' || intent === 'steady-pull' ? -1 : 1;
+  const length = 28 + strength * 34;
+  wake.clear();
+  for (let index = 0; index < 3; index += 1) {
+    const offset = index * 12;
+    const width = Math.max(8, length - index * 10);
+    wake
+      .moveTo(x + direction * (offset + 8), y + 12 + index * 4)
+      .quadraticCurveTo(x + direction * (offset + width / 2), y + 6 + Math.sin(elapsed * 3 + index) * 2, x + direction * (offset + width), y + 12 + index * 4)
+      .stroke({ color: index === 0 ? 0xd1f4e5 : 0x8fcfc5, width: index === 0 ? 2.4 : 1.2, alpha: (0.25 - index * 0.055) * strength });
+  }
+}
+
 export function CanalScene({
   artwork,
   description,
@@ -38,6 +62,7 @@ export function CanalScene({
   eventSequence,
   fishAction,
   fishDistance,
+  fishTension,
   fishIntent,
   fishRarity,
   phase,
@@ -57,6 +82,7 @@ export function CanalScene({
     eventSequence,
     fishAction,
     fishDistance,
+    fishTension,
     fishIntent,
     fishRarity,
     phase,
@@ -97,7 +123,9 @@ export function CanalScene({
     void Assets.load<Texture>(path).then((texture) => {
       if (request !== artworkRequestRef.current || artworkSpriteRef.current !== sprite) return;
       sprite.texture = texture;
-      artworkScaleRef.current = coverSprite(sprite, texture);
+      // Keep the canal visible around the encounter artwork. The fish reads as
+      // a layered moment in the location instead of a full-screen card.
+      artworkScaleRef.current = coverSprite(sprite, texture) * 0.72;
     }).catch(() => {
       if (request === artworkRequestRef.current && artworkSpriteRef.current === sprite) {
         sprite.texture = Texture.EMPTY;
@@ -112,13 +140,14 @@ export function CanalScene({
       eventSequence,
       fishAction,
       fishDistance,
+      fishTension,
       fishIntent,
       fishRarity,
       phase,
       bossPhase,
       reducedMotion,
     };
-  }, [artwork, event, eventSequence, fishAction, fishDistance, fishIntent, fishRarity, phase, bossPhase, reducedMotion]);
+  }, [artwork, event, eventSequence, fishAction, fishDistance, fishTension, fishIntent, fishRarity, phase, bossPhase, reducedMotion]);
 
   useEffect(() => {
     loadArtwork(artwork);
@@ -303,14 +332,31 @@ export function CanalScene({
         const sceneArtwork = new Sprite(Texture.EMPTY);
         sceneArtwork.anchor.set(0.5);
         sceneArtwork.position.set(SCENE_WIDTH / 2, SCENE_HEIGHT / 2);
+        sceneArtwork.alpha = 0.82;
         sceneArtwork.visible = false;
         artworkSpriteRef.current = sceneArtwork;
+        const artworkMask = new Graphics()
+          .ellipse(800, 458, 195, 125)
+          .fill({ color: 0xffffff });
+        sceneArtwork.mask = artworkMask;
         const artworkAura = new Graphics()
-          .ellipse(805, 455, 385, 232)
+          .ellipse(805, 455, 210, 135)
           .fill({ color: 0x8887cf, alpha: 0.035 });
         const artworkVeil = new Graphics()
           .rect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
           .fill({ color: 0x071a2a, alpha: 0.095 });
+
+        // Encounter feedback stays in the world layer so every decision visibly
+        // affects the canal instead of replacing it with a UI surface.
+        const fishingLine = new Graphics();
+        const waterWake = new Graphics();
+        const waterRipples = Array.from({ length: 4 }, () => new Graphics());
+        const splashParticles = Array.from({ length: 7 }, (_, index) => new Graphics()
+          .circle(0, 0, index % 2 === 0 ? 3 : 2)
+          .fill({ color: index % 2 === 0 ? 0xe5f4d8 : 0x8dd3c9, alpha: 0.85 }));
+        const disturbance = new Container();
+        disturbance.addChild(waterWake, fishingLine, ...waterRipples, ...splashParticles);
+        disturbance.visible = false;
 
         const sparklePoints = [
           { x: 412, y: 462 },
@@ -335,11 +381,13 @@ export function CanalScene({
           mistLayer,
           waterSheen,
           depthWash,
+          artworkMask,
           sceneArtwork,
           artworkAura,
           artworkVeil,
           ...surfaceSparkles,
           foregroundFrame,
+          disturbance,
         );
         app.stage.addChild(world);
         loadBackground();
@@ -369,10 +417,11 @@ export function CanalScene({
           const artReady = sceneArtwork.texture !== Texture.EMPTY;
           const fishArtworkVisible = encounterVisible && artReady;
           fallbackWorld.visible = !backgroundReady;
-          backgroundSprite.visible = backgroundReady && !fishArtworkVisible;
+          backgroundSprite.visible = backgroundReady;
           sceneArtwork.visible = fishArtworkVisible;
           artworkAura.visible = fishArtworkVisible;
           artworkVeil.visible = fishArtworkVisible;
+          disturbance.visible = fishArtworkVisible || state.phase === 'caught';
 
           const eventJolt = state.event === 'fish-action' || state.event === 'line-damaged' || state.event === 'line-break'
             ? feedbackPulse
@@ -403,6 +452,38 @@ export function CanalScene({
               SCENE_HEIGHT / 2 + actionOffset + intentMotion + (motion ? Math.sin(elapsed * 0.7) * 1.5 : 0),
             );
             sceneArtwork.rotation = artTilt + (state.fishIntent === 'thrash' && motion ? Math.sin(elapsed * 12) * 0.012 : 0);
+          }
+
+          if (disturbance.visible) {
+            const distanceRatio = Math.max(0, Math.min(1, state.fishDistance / 100));
+            const fishX = 780 - distanceRatio * 300 + (motion ? Math.sin(elapsed * 1.4) * 5 : 0);
+            const fishY = 472 + (state.fishIntent === 'deep-dive' ? 64 : state.fishIntent === 'power-dash' ? -14 : 0);
+            const playerX = 272;
+            const playerY = 650;
+            const actionStrength = state.event === 'line-damaged' || state.event === 'line-break'
+              ? 1
+              : state.event?.startsWith('action-') ? 0.85 : 0.55;
+            drawLine(fishingLine, playerX, playerY, fishX, fishY, state.fishTension, fishArtworkVisible ? 0.9 : 0.5);
+            drawWake(waterWake, fishX, fishY, state.fishIntent, actionStrength, elapsed);
+
+            const rippleStrength = Math.min(1, actionStrength + (state.fishIntent === 'recover' ? 0.1 : 0));
+            for (let index = 0; index < waterRipples.length; index += 1) {
+              const ripple = waterRipples[index]!;
+              const cycle = (elapsed * (0.35 + index * 0.06) + index * 0.22) % 1;
+              ripple.clear()
+                .ellipse(fishX, fishY + 14, 26 + cycle * 60 + index * 7, 7 + cycle * 13)
+                .stroke({ color: index === 0 ? 0xe5f4d8 : 0x8bc8bf, width: index === 0 ? 2 : 1, alpha: (1 - cycle) * 0.2 * rippleStrength });
+            }
+
+            const burst = feedbackPulse > 0.05 && (state.event === 'caught' || state.event === 'line-break' || state.event === 'line-damaged' || state.event === 'fish-action');
+            for (let index = 0; index < splashParticles.length; index += 1) {
+              const particle = splashParticles[index]!;
+              const phase = (elapsed * 1.8 + index * 0.13) % 1;
+              const angle = -Math.PI * 0.92 + (index / Math.max(1, splashParticles.length - 1)) * Math.PI * 0.84;
+              const lift = burst ? phase * 38 : 0;
+              particle.position.set(fishX + Math.cos(angle) * (12 + phase * 42), fishY + Math.sin(angle) * (10 + phase * 28) - lift);
+              particle.alpha = burst ? (1 - phase) * 0.8 : 0;
+            }
           }
 
 

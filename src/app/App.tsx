@@ -22,6 +22,7 @@ export function App() {
   const notice = useGameStore((state) => state.notice);
   const sessionEvent = useGameStore((state) => state.session?.lastEvent ?? null);
   const sessionEventSequence = useGameStore((state) => state.session?.eventSequence ?? 0);
+  const fishingPhase = useGameStore((state) => state.session?.phase ?? 'ready');
   const setTab = useGameStore((state) => state.setTab);
   const setLocale = useGameStore((state) => state.setLocale);
   const setSoundEnabled = useGameStore((state) => state.setSoundEnabled);
@@ -45,7 +46,7 @@ export function App() {
 
 
   return (
-    <div className="game-shell" data-reduced-motion={reducedMotion}>
+    <div className="game-shell" data-reduced-motion={reducedMotion} data-tab={activeTab} data-fishing-phase={fishingPhase}>
       <header className="masthead liquid-pane liquid-pane--bar">
         <div className="masthead__brand">
           <img className="brand-mark" src="/theme_games/brand-mark.webp" alt="" />
