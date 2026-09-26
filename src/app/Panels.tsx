@@ -10,6 +10,7 @@ import type { GameTab } from '../game/state/game-store';
 import { unlockFishingAudio } from './audio';
 import { UI_COPY, localize } from './copy';
 import type { Locale } from './copy';
+import { presentationCombatEvent, useFishingPresentation } from './presentation';
 import { CanalScene } from './CanalScene';
 
 type UiCopy = typeof UI_COPY.en;
@@ -76,15 +77,19 @@ function TacticCards({
   fishProfile,
   gearStats,
   onAction,
+  presentationBusy = false,
+  resolvingAction = null,
 }: {
   copy: UiCopy;
   session: TurnFishingSession | null;
   fishProfile: ReturnType<typeof toTurnFishProfile> | null;
   gearStats: ReturnType<typeof toTurnGearStats>;
   onAction: (action: TurnFishingAction) => void;
+  presentationBusy?: boolean;
+  resolvingAction?: TurnFishingAction | null;
 }) {
   return (
-    <div className="fight-actions" role="group" aria-label={copy.fight} data-control-surface="tactical-actions">
+    <div className="game-command-bar fight-actions" role="group" aria-label={copy.fight} data-control-surface="tactical-actions">
       {FIGHT_ACTIONS.map((action) => {
         const preview = session && fishProfile
           ? previewTurnFishingAction(session, action, fishProfile, gearStats)
@@ -97,15 +102,16 @@ function TacticCards({
         return (
           <button
             type="button"
-            className={`action-button action-button--${action} liquid-pane liquid-pane--interactive liquid-pane--tactic liquid-pane--${action}`}
+            className={`action-button action-button--${action} liquid-pane liquid-pane--interactive liquid-pane--tactic liquid-pane--${action}${resolvingAction === action ? ' is-resolving' : ''}`}
             data-matchup={preview?.mode ?? (preview ? 'automatic' : 'unavailable')}
             data-action={action}
             key={action}
             onClick={() => onAction(action)}
-            disabled={!session || !fishProfile || session.ap < 1}
+            disabled={!session || !fishProfile || session.ap < 1 || presentationBusy}
             aria-keyshortcuts={action === 'reel' ? '1' : action === 'pull' ? '2' : action === 'release' ? '3' : action === 'brace' ? '4' : '5'}
             aria-label={`${copy[action]}. 1 ${copy.actionPoints}. ${matchup}. ${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
             title={`${copy.actionHint[action]} ${preview?.modeReason ? copy.modeReason[preview.modeReason] : ''}`}
+            data-tooltip={`${copy.actionHint[action]}${preview?.modeReason ? ` ${copy.modeReason[preview.modeReason]}` : ''}`}
           >
             <img className="action-card__art" src={`/theme_games/method-${action === 'reel' ? 'float' : action === 'pull' ? 'lure' : action === 'release' ? 'bobber' : action === 'brace' ? 'net' : 'observe'}.webp`} alt="" />
             <span className="action-card__head">
@@ -135,12 +141,10 @@ function CombatVitals({
   copy,
   locale,
   session,
-  fishName,
 }: {
   copy: UiCopy;
   locale: Locale;
   session: TurnFishingSession;
-  fishName: string;
 }) {
   const metrics = [
     {
@@ -167,24 +171,23 @@ function CombatVitals({
       display: `${numberText(session.distance, locale)} / ${numberText(session.maxDistance, locale)}`,
       tone: 'distance',
     },
-    {
+  ] as const;
+  const lineIsDangerous = session.lineDurability <= session.maxLineDurability * 0.4;
+  const visibleMetrics = lineIsDangerous
+    ? [...metrics, {
       key: 'line',
       label: locale === 'th' ? 'ความทนสาย' : 'Line durability',
       value: session.lineDurability,
       max: session.maxLineDurability,
       display: `${numberText(session.lineDurability, locale)} / ${numberText(session.maxLineDurability, locale)}`,
       tone: 'line',
-    },
-  ] as const;
+    }]
+    : metrics;
 
   return (
-    <section className="combat-vitals" data-control-surface="combat-vitals" aria-label={`${fishName}: ${copy.fight}`}>
-      <div className="combat-vitals__identity">
-        <span className="combat-vitals__label">{copy.fight}</span>
-        <strong>{fishName}</strong>
-      </div>
+    <section className="combat-vitals" data-control-surface="combat-vitals" aria-label={copy.fight}>
       <div className="combat-vitals__metrics">
-        {metrics.map((metric) => (
+        {visibleMetrics.map((metric) => (
           <div className={`combat-vital combat-vital--${metric.tone}`} key={metric.key} data-vital={metric.key}>
             <div className="combat-vital__heading">
               <span>{metric.label}</span>
@@ -219,6 +222,32 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
   const selectedSpot = FISHING_SPOTS.find((spot) => spot.id === selectedSpotId) ?? FISHING_SPOTS[0]!;
   const fish = getActiveFish(session);
   const fishProfile = fish ? toTurnFishProfile(fish) : null;
+  const phase = session?.phase ?? 'ready';
+  const { activeEvent, events: presentationEvents, busy: presentationBusy } = useFishingPresentation();
+  const apChangeEvent = presentationEvents.find((event) => event.type === 'AP_CHANGED');
+  const fishTurnEvent = presentationEvents.find((event) => event.type === 'FISH_ACTION_RESOLVED');
+  const beforeApChange = Boolean(presentationBusy && activeEvent && apChangeEvent && activeEvent.order < apChangeEvent.order);
+  const beforeFishTurn = Boolean(presentationBusy && activeEvent && fishTurnEvent && activeEvent.order < fishTurnEvent.order);
+  const displayedAp = session && beforeApChange
+    ? apChangeEvent?.previousValue ?? session.ap
+    : session && beforeFishTurn && apChangeEvent
+      ? apChangeEvent.value ?? session.ap
+      : session?.ap ?? 0;
+  const displayedTurn = session && beforeFishTurn ? Math.max(1, session.turn - 1) : session?.turn ?? 0;
+  const castingPresentation = activeEvent?.type === 'CAST';
+  const displayedIntent = activeEvent?.type === 'INTENT_REVEALED'
+    ? activeEvent.intent ?? null
+    : activeEvent?.type === 'FISH_ACTION_RESOLVED'
+      ? activeEvent.intent ?? session?.lastIntent ?? null
+      : activeEvent?.type === 'ESCAPED' || activeEvent?.type === 'LINE_BREAK'
+        ? null
+        : castingPresentation
+          ? null
+          : presentationBusy
+            ? session?.lastIntent ?? session?.currentIntent.type ?? null
+            : session?.currentIntent.type ?? null;
+  const encounterVisible = !castingPresentation && (presentationBusy || phase === 'player-turn' || phase === 'caught');
+  const sceneEvent = presentationCombatEvent(activeEvent);
   const gearStats = toTurnGearStats(getEquippedGearItems({ equippedGear }));
   const fishCollection = useGameStore((state) => state.fishCollection);
   const bait = GEAR.find((item) => item.id === selectedBaitId);
@@ -227,7 +256,6 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
     const record = fishCollection[target.id];
     return (record?.knowledgeLevel ?? 0) >= 2;
   });
-  const phase = session?.phase ?? 'ready';
   const inDuel = phase === 'player-turn';
   const canChangeSpot = phase !== 'player-turn' && phase !== 'caught';
   const result = session?.result;
@@ -242,10 +270,13 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
   }).length;
   const firstEncounter = Object.keys(fishCollection).length === 0;
   const showFirstCastGuidance = firstEncounter && phase === 'ready';
-  const showFirstTurnGuidance = firstEncounter && inDuel && !session?.lastAction;
-  const intentSession = session?.insight ? { ...session, insight: false } : session;
-  const intentCounter = intentSession && fishProfile
-    ? FIGHT_ACTIONS.find((action) => previewTurnFishingAction(intentSession, action, fishProfile, gearStats).mode === 'advantage')
+  const showFirstTurnGuidance = firstEncounter && inDuel && !session?.lastAction && !presentationBusy;
+  const intentSession = session && displayedIntent && session.currentIntent.type !== displayedIntent
+    ? { ...session, currentIntent: { ...session.currentIntent, type: displayedIntent } }
+    : session;
+  const intentCounterSession = intentSession?.insight ? { ...intentSession, insight: false } : intentSession;
+  const intentCounter = intentCounterSession && fishProfile
+    ? FIGHT_ACTIONS.find((action) => previewTurnFishingAction(intentCounterSession, action, fishProfile, gearStats).mode === 'advantage')
     : null;
   const buildIsPowerLed = gearStats.power > gearStats.control;
   const buildProfile = buildIsPowerLed ? copy.powerBuild : copy.controlBuild;
@@ -256,11 +287,12 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
     .filter(({ value }) => value < 0);
 
   const runAction = (action: TurnFishingAction) => {
+    if (presentationBusy) return;
     markSoundGesture(() => act(action));
   };
 
   useEffect(() => {
-    if (!inDuel || !session || session.ap < 1) return;
+    if (!inDuel || !session || session.ap < 1 || presentationBusy) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       if (event.altKey || event.ctrlKey || event.metaKey || event.repeat
@@ -273,7 +305,7 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [act, inDuel, session]);
+  }, [act, inDuel, presentationBusy, session]);
 
   return (
     <div className="fishing-layout">
@@ -320,20 +352,22 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
 
         <div className="scene-frame" data-phase={phase}>
           <CanalScene
-            artwork={inDuel || phase === 'caught' ? fish?.artwork ?? null : null}
+            artwork={encounterVisible ? fish?.artwork ?? null : null}
             description={`${copy.phase[phase]}. ${localize(selectedSpot.description, locale)}`}
             errorMessage={copy.sceneError}
-            event={session?.lastEvent ?? null}
-            eventSequence={session?.eventSequence ?? 0}
-            fishAction={session?.lastAction ?? null}
+            event={sceneEvent}
+            eventSequence={activeEvent && sceneEvent ? activeEvent.sequence * 16 + activeEvent.order + 1 : 0}
+            fishAction={activeEvent?.type === 'PLAYER_ACTION_RESOLVED' ? activeEvent.action ?? null : null}
             fishDistance={session?.distance ?? 0}
             fishTension={session?.tension ?? 0}
-            fishIntent={session?.currentIntent.type ?? null}
+            fishIntent={displayedIntent}
             fishRarity={fish?.rarity ?? null}
             phase={phase}
             bossPhase={session?.bossPhase ?? null}
             reducedMotion={reducedMotion}
             spotName={localize(selectedSpot.name, locale)}
+            showEncounter={encounterVisible}
+            fishId={encounterVisible ? fish?.id ?? null : null}
           />
           <aside className="scene-intel" aria-label={copy.area}>
             <h3>{copy.area}</h3>
@@ -359,18 +393,20 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             </div>
           </aside>
           <div className="scene-callout liquid-pane liquid-pane--hud" aria-live="polite" aria-atomic="true">
-            {session && fish ? (
+            {session && fish && !castingPresentation ? (
               <>
                 <div className="scene-callout__meta">
                   <span>{copy.rarity[fish.rarity]}</span>
                   {session.bossPhase && <span>{copy.bossPhase[session.bossPhase]}</span>}
                 </div>
                 <h3>{localize(fish.name, locale)}</h3>
-                <div className="scene-callout__intent" data-intent={session.currentIntent.type}>
-                  <strong>{copy.intentName[session.currentIntent.type]}</strong>
-                  <span>{copy.intentHint[session.currentIntent.type]}</span>
-                  {intentCounter && <span className="scene-callout__counter">{copy[intentCounter]}</span>}
-                </div>
+                {displayedIntent && (
+                  <div className={`scene-callout__intent${activeEvent?.type === 'PLAYER_ACTION_RESOLVED' && activeEvent.action === 'observe' ? ' is-focused' : ''}`} data-intent={displayedIntent}>
+                    <strong>{copy.intentName[displayedIntent]}</strong>
+                    <span>{copy.intentHint[displayedIntent]}</span>
+                    {intentCounter && <span className="scene-callout__counter">{copy[intentCounter]}</span>}
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -384,15 +420,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               copy={copy}
               locale={locale}
               session={session}
-              fishName={localize(fish.name, locale)}
             />
           )}
           {inDuel && session && (
-            <div className="turn-counter liquid-pane liquid-pane--hud" aria-label={`${copy.turn} ${session.turn}, ${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
-              <span>{copy.turn} <strong>{numberText(session.turn, locale)}</strong></span>
+            <div className="turn-counter liquid-pane liquid-pane--hud" aria-label={`${copy.turn} ${displayedTurn}, ${copy.actionPoints} ${displayedAp} / ${session.maxAp}`}>
+              <span>{copy.turn} <strong>{numberText(displayedTurn, locale)}</strong></span>
               <span className="turn-counter__ap">
                 <span>{copy.actionPoints}</span>
-                <strong>{numberText(session.ap, locale)} / {numberText(session.maxAp, locale)}</strong>
+                <strong>{numberText(displayedAp, locale)} / {numberText(session.maxAp, locale)}</strong>
               </span>
             </div>
           )}
@@ -431,12 +466,6 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
             <p className="session-status" role="status" aria-live="polite" aria-atomic="true">
             {copy.phase[phase]}
             </p>
-            {inDuel && session && (
-              <span className="action-dock__ap" aria-label={`${copy.actionPoints} ${session.ap} / ${session.maxAp}`}>
-                <span>{copy.actionPoints}</span>
-                <strong>{numberText(session.ap, locale)} / {numberText(session.maxAp, locale)}</strong>
-              </span>
-            )}
           </div>
           {inDuel && session && fishProfile && (
             <>
@@ -445,12 +474,14 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
               )}
               <TacticCards
                 copy={copy}
-                session={session}
+                session={castingPresentation ? null : intentSession}
                 fishProfile={fishProfile}
                 gearStats={gearStats}
                 onAction={runAction}
+                presentationBusy={presentationBusy}
+                resolvingAction={activeEvent?.type === 'PLAYER_ACTION_RESOLVED' ? activeEvent.action : null}
               />
-              {session.lastAction && (
+              {session.lastAction && (!presentationBusy || activeEvent?.type === 'CHECK_RESOLVED' || (activeEvent?.order ?? 0) >= 2) && (
                 <div
                   className={`last-check liquid-pane liquid-pane--readout ${session.lastCheck ? `last-check--${session.lastCheck.outcome}` : 'last-check--no-roll'}`}
                   data-outcome={session.lastCheck?.outcome ?? 'no-roll'}
@@ -479,20 +510,20 @@ export function FishingPanel({ copy, locale }: { copy: UiCopy; locale: Locale })
                   ) : (
                     <p>{copy.actionHint[session.lastAction]}</p>
                   )}
-                  {(session.lastEvent === 'fish-action' || session.lastEvent === 'line-damaged') && session.lastIntent && (
-                    <p>{copy.fishResponse}: {copy.intentHint[session.lastIntent]}</p>
+                  {(activeEvent?.type === 'FISH_ACTION_RESOLVED' || activeEvent?.type === 'LINE_DAMAGED') && displayedIntent && (
+                    <p>{copy.fishResponse}: {copy.intentHint[displayedIntent]}</p>
                   )}
                 </div>
               )}
             </>
           )}
-          {(phase === 'escaped' || phase === 'line-break') && (
+          {!presentationBusy && (phase === 'escaped' || phase === 'line-break') && (
             <div className="outcome-line">
               <p>{phase === 'escaped' ? copy.fishEscaped : copy.lineBroken}</p>
               <button className="action-button action-button--cast liquid-pane liquid-pane--interactive liquid-pane--accent" onClick={restartSession}>{copy.tryAgain}</button>
             </div>
           )}
-          {phase === 'caught' && result && fish && (
+          {!presentationBusy && phase === 'caught' && result && fish && (
             <section
               className={`catch-reveal catch-reveal--${fish.rarity} liquid-pane liquid-pane--reveal`}
               aria-labelledby="catch-title"

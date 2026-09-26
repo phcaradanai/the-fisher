@@ -14,6 +14,7 @@ import type {
   TurnFishingSession,
   TurnFishProfile,
   TurnGearStats,
+  TurnPresentationEvent,
 } from './turn-types';
 
 const AP_PER_TURN = 2;
@@ -276,6 +277,52 @@ function actionDifficulty(action: TurnFishingAction, session: TurnFishingSession
   return session.currentIntent.difficulty;
 }
 
+function presentationEvents(
+  before: TurnFishingSession,
+  afterPlayerAction: TurnFishingSession,
+  after: TurnFishingSession,
+  action: TurnFishingAction,
+  fishActionResolved: boolean,
+): TurnPresentationEvent[] {
+  const events: TurnPresentationEvent[] = [];
+  const add = (event: Omit<TurnPresentationEvent, 'order' | 'sequence'>) => {
+    events.push({ ...event, sequence: after.eventSequence, order: events.length });
+  };
+
+  add({ type: 'PLAYER_ACTION_RESOLVED', action });
+  if (afterPlayerAction.lastCheck) add({ type: 'CHECK_RESOLVED', check: afterPlayerAction.lastCheck });
+  if (afterPlayerAction.stamina < before.stamina) {
+    add({
+      type: 'STAMINA_DAMAGED',
+      amount: before.stamina - afterPlayerAction.stamina,
+      value: afterPlayerAction.stamina,
+    });
+  }
+  add({
+    type: 'AP_CHANGED',
+    amount: 1,
+    previousValue: before.ap,
+    value: afterPlayerAction.ap,
+  });
+  if (fishActionResolved) {
+    add({ type: 'FISH_ACTION_RESOLVED', intent: before.currentIntent.type });
+  }
+  if (after.lineDurability < afterPlayerAction.lineDurability) {
+    add({
+      type: 'LINE_DAMAGED',
+      amount: afterPlayerAction.lineDurability - after.lineDurability,
+      value: after.lineDurability,
+    });
+  }
+  if (fishActionResolved && after.turn > before.turn) {
+    add({ type: 'INTENT_REVEALED', intent: after.currentIntent.type, value: after.currentIntent.difficulty });
+  }
+  if (after.phase === 'caught') add({ type: 'FISH_CAUGHT' });
+  else if (after.phase === 'escaped') add({ type: 'ESCAPED' });
+  else if (after.phase === 'line-break') add({ type: 'LINE_BREAK' });
+  return events;
+}
+
 export function previewTurnFishingAction(
   session: TurnFishingSession,
   action: TurnFishingAction,
@@ -502,14 +549,16 @@ function settleAfterPlayerAction(
   session: TurnFishingSession,
   fish: TurnFishProfile,
   stats: TurnGearStats,
-): TurnFishingSession {
+): { session: TurnFishingSession; fishActionResolved: boolean } {
   if (session.stamina <= 0 && session.distance <= (fish.catchDistance ?? CATCH_DISTANCE)) {
-    return finishCaught(session, fish);
+    return { session: finishCaught(session, fish), fishActionResolved: false };
   }
-  if (session.tension >= 100 || session.lineDurability <= 0) return finishFailure(session, 'line-break');
-  if (session.distance >= MAX_DISTANCE) return finishFailure(session, 'escaped');
-  if (session.ap > 0) return session;
-  return resolveFishAction(session, fish, stats);
+  if (session.tension >= 100 || session.lineDurability <= 0) {
+    return { session: finishFailure(session, 'line-break'), fishActionResolved: false };
+  }
+  if (session.distance >= MAX_DISTANCE) return { session: finishFailure(session, 'escaped'), fishActionResolved: false };
+  if (session.ap > 0) return { session, fishActionResolved: false };
+  return { session: resolveFishAction(session, fish, stats), fishActionResolved: true };
 }
 
 export function createTurnFishingSession(
@@ -551,6 +600,24 @@ export function createTurnFishingSession(
   };
 }
 
+export function createTurnFishingSessionEvents(session: TurnFishingSession): TurnPresentationEvent[] {
+  return [
+    {
+      type: 'CAST',
+      sequence: session.eventSequence,
+      order: 0,
+      value: session.distance,
+    },
+    {
+      type: 'INTENT_REVEALED',
+      sequence: session.eventSequence,
+      order: 1,
+      intent: session.currentIntent.type,
+      value: session.currentIntent.difficulty,
+    },
+  ];
+}
+
 export function applyTurnFishingAction(
   session: TurnFishingSession,
   action: TurnFishingAction,
@@ -558,7 +625,7 @@ export function applyTurnFishingAction(
   stats: TurnGearStats,
 ): TurnActionResolution {
   if (session.phase !== 'player-turn' || session.ap <= 0 || session.fishId !== fish.id) {
-    return { session, observationSucceeded: false };
+    return { session, observationSucceeded: false, events: [] };
   }
 
   let next: TurnFishingSession;
@@ -582,9 +649,11 @@ export function applyTurnFishingAction(
     observationSucceeded = result.observationSucceeded;
   }
 
+  const settlement = settleAfterPlayerAction(next, fish, stats);
   return {
-    session: settleAfterPlayerAction(next, fish, stats),
+    session: settlement.session,
     observationSucceeded,
+    events: presentationEvents(session, next, settlement.session, action, settlement.fishActionResolved),
   };
 }
 

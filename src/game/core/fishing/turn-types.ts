@@ -88,6 +88,34 @@ export type TurnCombatEvent =
   | 'escaped'
   | 'line-break';
 
+/** Ephemeral, ordered cues for the presentation layer. Never include in saves. */
+export type TurnPresentationEventType =
+  | 'CAST'
+  | 'PLAYER_ACTION_RESOLVED'
+  | 'CHECK_RESOLVED'
+  | 'AP_CHANGED'
+  | 'STAMINA_DAMAGED'
+  | 'LINE_DAMAGED'
+  | 'FISH_ACTION_RESOLVED'
+  | 'INTENT_REVEALED'
+  | 'FISH_CAUGHT'
+  | 'ESCAPED'
+  | 'LINE_BREAK';
+
+export interface TurnPresentationEvent {
+  type: TurnPresentationEventType;
+  /** Combat event sequence at which this cue was produced. */
+  sequence: number;
+  /** Position within one action resolution, starting at zero. */
+  order: number;
+  action?: TurnFishingAction;
+  intent?: FishIntentType;
+  check?: SkillCheckResult;
+  previousValue?: number;
+  amount?: number;
+  value?: number;
+}
+
 export interface TurnCatchResult {
   fishId: string;
   lengthCm: number;
@@ -124,6 +152,7 @@ export interface TurnFishingSession {
 export interface TurnActionResolution {
   session: TurnFishingSession;
   observationSucceeded: boolean;
+  events: TurnPresentationEvent[];
 }
 
 export interface TurnActionPreview {

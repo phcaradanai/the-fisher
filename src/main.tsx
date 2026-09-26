@@ -7,12 +7,15 @@ import '@fontsource/kanit/500.css';
 import '@fontsource/kanit/600.css';
 import '@fontsource/kanit/700.css';
 import { App } from './app/App';
+import { FishingPresentationProvider } from './app/presentation';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Missing application root element.');
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <FishingPresentationProvider>
+      <App />
+    </FishingPresentationProvider>
   </StrictMode>,
 );

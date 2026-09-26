@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { AREAS, FISH, FISHING_SPOTS, GEAR, STORY_EVENTS, getFishById, getFishingSpotById, getGearById } from '../../content';
 import type { FishDefinition, FishingSpotDefinition, GearCategory, GearDefinition, StoryEventDefinition } from '../../content/types';
-import { applyTurnFishingAction, createTurnFishingSession } from '../core/fishing/turn-engine';
+import { applyTurnFishingAction, createTurnFishingSession, createTurnFishingSessionEvents } from '../core/fishing/turn-engine';
 import { nextRandomFloat } from '../core/fishing/random';
 import { toTurnFishProfile, toTurnGearStats } from '../core/fishing/turn-adapter';
-import type { TurnFishingAction, TurnFishingSession, TurnGearStats } from '../core/fishing/turn-types';
+import type { TurnFishingAction, TurnFishingSession, TurnGearStats, TurnPresentationEvent } from '../core/fishing/turn-types';
 import { createDefaultSave, decodeSave, encodeSave } from './save';
 import type { SaveData } from './save';
 
@@ -24,12 +24,15 @@ export type SaveStatus = 'saved' | 'unavailable';
 
 export interface GameStore extends SaveData {
   session: TurnFishingSession | null;
+  /** Ordered presentation cues for the most recent cast or action. Runtime only. */
+  presentationEvents: TurnPresentationEvent[];
   sessionSeed: number;
   activeTab: GameTab;
   notice: GameNotice;
   saveStatus: SaveStatus;
   cast(): void;
   act(action: TurnFishingAction): void;
+  consumePresentationEvent(sequence: number, order: number): void;
   selectSpot(spotId: string): void;
   setTab(tab: GameTab): void;
   buyGear(gearId: string): void;
@@ -239,7 +242,7 @@ const initial = readInitialSave();
 export const useGameStore = create<GameStore>((set, get) => {
   const commitSave = (
     patch: Partial<SaveData>,
-    runtime: Partial<Pick<GameStore, 'session' | 'sessionSeed' | 'notice'>> = {},
+    runtime: Partial<Pick<GameStore, 'session' | 'sessionSeed' | 'notice' | 'presentationEvents'>> = {},
   ) => {
     const nextSave = { ...saveProjection(get()), ...patch };
     const persisted = persistSave(nextSave);
@@ -264,7 +267,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     return turnGearStatsCache;
   };
 
-  const recordCatch = (session: TurnFishingSession) => {
+  const recordCatch = (session: TurnFishingSession, presentationEvents: TurnPresentationEvent[]) => {
     const state = get();
     const result = session.result;
     if (!result) return;
@@ -306,15 +309,15 @@ export const useGameStore = create<GameStore>((set, get) => {
       seenStoryEvents,
       unlockedSpotIds,
       selectedSpotId,
-    }, { session, sessionSeed: session.seed, notice: null });
+    }, { session, sessionSeed: session.seed, notice: null, presentationEvents });
   };
 
-  const recordObservation = (fishId: string, session: TurnFishingSession) => {
+  const recordObservation = (fishId: string, session: TurnFishingSession, presentationEvents: TurnPresentationEvent[]) => {
     const state = get();
     const previousRecord = state.fishCollection[fishId];
     const knowledgeLevel = previousRecord?.knowledgeLevel ?? 0;
     if (knowledgeLevel >= 3) {
-      set({ session, sessionSeed: session.seed, notice: null });
+      set({ session, sessionSeed: session.seed, notice: null, presentationEvents });
       return;
     }
 
@@ -330,12 +333,13 @@ export const useGameStore = create<GameStore>((set, get) => {
     const seenStoryEvents = knowledgeLevel === 0
       ? triggeredEvents(state.seenStoryEvents, 'fish-discovered')
       : state.seenStoryEvents;
-    commitSave({ fishCollection, seenStoryEvents }, { session, sessionSeed: session.seed, notice: null });
+    commitSave({ fishCollection, seenStoryEvents }, { session, sessionSeed: session.seed, notice: null, presentationEvents });
   };
 
   return {
     ...initial.save,
     session: null,
+    presentationEvents: [],
     sessionSeed: makeSessionSeed(),
     activeTab: 'fishing',
     notice: null,
@@ -363,10 +367,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         toTurnFishProfile(encounter.fish),
         stats,
       );
-      set({ session, sessionSeed: session.seed, notice: null });
+      set({ session, sessionSeed: session.seed, notice: null, presentationEvents: createTurnFishingSessionEvents(session) });
     },
     act(action) {
       const state = get();
+      if (state.presentationEvents.length > 0) return;
       const currentSession = state.session;
       if (!currentSession || currentSession.phase !== 'player-turn') {
         set({ notice: 'not-caught' });
@@ -385,16 +390,23 @@ export const useGameStore = create<GameStore>((set, get) => {
         turnGearStats(),
       );
       if (resolution.session.phase === 'caught') {
-        recordCatch(resolution.session);
+        recordCatch(resolution.session, resolution.events);
       } else if (resolution.observationSucceeded) {
-        recordObservation(fish.id, resolution.session);
+        recordObservation(fish.id, resolution.session, resolution.events);
       } else {
         set({
           session: resolution.session,
           sessionSeed: resolution.session.seed,
+          presentationEvents: resolution.events,
           notice: null,
         });
       }
+    },
+    consumePresentationEvent(sequence, order) {
+      const state = get();
+      const head = state.presentationEvents[0];
+      if (!head || head.sequence !== sequence || head.order !== order) return;
+      set({ presentationEvents: state.presentationEvents.slice(1) });
     },
     selectSpot(spotId) {
       const state = get();
@@ -409,6 +421,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       commitSave({ selectedSpotId: spotId }, {
         session: null,
         sessionSeed: state.session?.seed ?? state.sessionSeed,
+        presentationEvents: [],
         notice: null,
       });
     },
@@ -466,7 +479,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({ notice: 'no-fish' });
         return;
       }
-      const runtime = { session: null, sessionSeed: session.seed };
+      const runtime = { session: null, sessionSeed: session.seed, presentationEvents: [] };
       if (disposition === 'sell') {
         commitSave({ coins: state.coins + fish.sellValue }, { ...runtime, notice: 'sold' });
       } else {
@@ -476,7 +489,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     restartSession() {
       const session = get().session;
       if (session?.phase !== 'escaped' && session?.phase !== 'line-break') return;
-      set({ session: null, sessionSeed: session.seed, notice: null });
+      set({ session: null, sessionSeed: session.seed, presentationEvents: [], notice: null });
     },
     setLocale(locale) {
       commitSave({ locale });

@@ -3,6 +3,7 @@ import { resolveSkillCheck } from './skill-check';
 import {
   applyTurnFishingAction,
   createTurnFishingSession,
+  createTurnFishingSessionEvents,
   isTurnCombatTerminal,
   previewTurnFishingAction,
 } from './turn-engine';
@@ -276,6 +277,96 @@ describe('turn fishing engine', () => {
     expect(result.result?.lengthCm).toBeGreaterThanOrEqual(calmFish.sizeRangeCm.min);
     expect(result.result?.lengthCm).toBeLessThanOrEqual(calmFish.sizeRangeCm.max);
     expect(isTurnCombatTerminal(result.phase)).toBe(true);
+  });
+
+  it('returns ordered transient presentation events for AP, damage, and a catch', () => {
+    const initial = createTurnFishingSession(51, calmFish, {
+      ...balancedGear,
+      power: 10,
+    });
+    const readyToLand: TurnFishingSession = {
+      ...initial,
+      stamina: 0,
+      distance: 5,
+      ap: 2,
+    };
+
+    const resolution = applyTurnFishingAction(readyToLand, 'release', calmFish, balancedGear);
+    expect(resolution.events.map((event) => event.type)).toEqual([
+      'PLAYER_ACTION_RESOLVED',
+      'AP_CHANGED',
+      'FISH_CAUGHT',
+    ]);
+    expect(resolution.events[1]).toMatchObject({ amount: 1, value: 1 });
+    expect(resolution.events[1]).toMatchObject({ previousValue: 2 });
+    expect(resolution.events.every((event, index) => event.order === index)).toBe(true);
+    expect(resolution.session.phase).toBe('caught');
+  });
+
+  it('keeps the final AP player action visible before the fish response and new intent', () => {
+    const initial = withIntent({
+      ...createTurnFishingSession(53, calmFish, balancedGear),
+      ap: 1,
+      tension: 28,
+      distance: 44,
+    }, 'steady-pull');
+
+    const resolution = applyTurnFishingAction(initial, 'observe', calmFish, balancedGear);
+    expect(resolution.events.map((event) => event.type)).toEqual([
+      'PLAYER_ACTION_RESOLVED',
+      'CHECK_RESOLVED',
+      'AP_CHANGED',
+      'FISH_ACTION_RESOLVED',
+      'INTENT_REVEALED',
+    ]);
+    expect(resolution.events[2]).toMatchObject({ previousValue: 1, value: 0, amount: 1 });
+    expect(resolution.session.turn).toBe(2);
+  });
+
+  it('shows fish response before line damage and the next intent', () => {
+    const initial = withIntent({
+      ...createTurnFishingSession(54, pikeFish, balancedGear),
+      ap: 1,
+      tension: 78,
+    }, 'power-dash');
+
+    const resolution = applyTurnFishingAction(initial, 'observe', pikeFish, balancedGear);
+    expect(resolution.events.map((event) => event.type)).toEqual([
+      'PLAYER_ACTION_RESOLVED',
+      'CHECK_RESOLVED',
+      'AP_CHANGED',
+      'FISH_ACTION_RESOLVED',
+      'LINE_DAMAGED',
+      'INTENT_REVEALED',
+    ]);
+    expect(resolution.session.lineDurability).toBeLessThan(initial.lineDurability);
+  });
+
+  it('shows a terminal fish action, line damage, then line break feedback', () => {
+    const initial = withIntent({
+      ...createTurnFishingSession(55, bossFish, balancedGear),
+      ap: 1,
+      tension: 98,
+    }, 'power-dash');
+
+    const resolution = applyTurnFishingAction(initial, 'observe', bossFish, balancedGear);
+    expect(resolution.events.map((event) => event.type)).toEqual([
+      'PLAYER_ACTION_RESOLVED',
+      'CHECK_RESOLVED',
+      'AP_CHANGED',
+      'FISH_ACTION_RESOLVED',
+      'LINE_DAMAGED',
+      'LINE_BREAK',
+    ]);
+    expect(resolution.session.phase).toBe('line-break');
+  });
+
+  it('exposes the initial cast and fish intent as ordered events', () => {
+    const session = createTurnFishingSession(52, calmFish, balancedGear);
+    expect(createTurnFishingSessionEvents(session).map((event) => event.type)).toEqual([
+      'CAST',
+      'INTENT_REVEALED',
+    ]);
   });
 
   it('ends the encounter when distance reaches escape or line-break limits', () => {

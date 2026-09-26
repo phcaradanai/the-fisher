@@ -36,6 +36,7 @@ function freshState() {
     selectedBaitId: 'bread-crumbs',
     equippedGear: { ...initialState.equippedGear, bait: 'bread-crumbs' },
     session: null,
+    presentationEvents: [],
     sessionSeed: 17,
     notice: null,
   });
@@ -52,6 +53,25 @@ describe('turn-based fishing progression', () => {
     expect(state.session?.phase).toBe('player-turn');
     expect(state.session?.ap).toBe(2);
     expect(spot.fishIds).toContain(state.session?.fishId);
+    expect(state.presentationEvents.map((event) => event.type)).toEqual(['CAST', 'INTENT_REVEALED']);
+  });
+
+  it('consumes presentation events in order and blocks actions while queued', () => {
+    useGameStore.getState().cast();
+    const casted = useGameStore.getState();
+    const [head, next] = casted.presentationEvents;
+    expect(head).toBeDefined();
+    expect(next).toBeDefined();
+    if (!head || !next) return;
+
+    casted.act('release');
+    expect(useGameStore.getState().session?.ap).toBe(2);
+    useGameStore.getState().consumePresentationEvent(head.sequence, head.order + 1);
+    expect(useGameStore.getState().presentationEvents).toHaveLength(2);
+    useGameStore.getState().consumePresentationEvent(head.sequence, head.order);
+    expect(useGameStore.getState().presentationEvents[0]).toEqual(next);
+    useGameStore.getState().consumePresentationEvent(next.sequence, next.order);
+    expect(useGameStore.getState().presentationEvents).toHaveLength(0);
   });
 
   it('records the catch, reputation, and story before settling its sell reward', () => {
@@ -68,6 +88,7 @@ describe('turn-based fishing progression', () => {
     const landed = useGameStore.getState();
     expect(landed.session?.phase).toBe('caught');
     expect(landed.session?.result?.fishId).toBe(minnow.id);
+    expect(landed.presentationEvents.map((event) => event.type)).toEqual(['PLAYER_ACTION_RESOLVED', 'AP_CHANGED', 'FISH_CAUGHT']);
     expect(landed.fishCollection[minnow.id]).toMatchObject({ caught: 1, knowledgeLevel: 1 });
     expect(landed.reputation).toBe(minnow.rewards.reputation);
     expect(landed.seenStoryEvents).toContain(firstCatchEvent.id);

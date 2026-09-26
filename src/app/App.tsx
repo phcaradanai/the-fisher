@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useGameStore } from '../game/state/game-store';
 import type { GameTab } from '../game/state/game-store';
 import { playFishingCue } from './audio';
 import { UI_COPY } from './copy';
 import type { Locale } from './copy';
+import { presentationCombatEvent, useFishingPresentation } from './presentation';
 import { PANEL_BY_TAB } from './Panels';
 import './styles.css';
 import './fantasy-canal.css';
@@ -20,15 +21,14 @@ export function App() {
   const soundEnabled = useGameStore((state) => state.soundEnabled);
   const reducedMotion = useGameStore((state) => state.reducedMotion);
   const notice = useGameStore((state) => state.notice);
-  const sessionEvent = useGameStore((state) => state.session?.lastEvent ?? null);
-  const sessionEventSequence = useGameStore((state) => state.session?.eventSequence ?? 0);
   const fishingPhase = useGameStore((state) => state.session?.phase ?? 'ready');
   const setTab = useGameStore((state) => state.setTab);
   const setLocale = useGameStore((state) => state.setLocale);
   const setSoundEnabled = useGameStore((state) => state.setSoundEnabled);
   const setReducedMotion = useGameStore((state) => state.setReducedMotion);
   const dismissNotice = useGameStore((state) => state.dismissNotice);
-  const previousEventSequence = useRef(0);
+  const { activeEvent } = useFishingPresentation();
+  const audioCue = presentationCombatEvent(activeEvent);
   const copy = UI_COPY[locale];
   const resourceFormatter = new Intl.NumberFormat(locale === 'th' ? 'th-TH' : 'en-US');
   const ActivePanel = PANEL_BY_TAB[activeTab];
@@ -38,11 +38,8 @@ export function App() {
   }, [locale]);
 
   useEffect(() => {
-    if (sessionEvent && sessionEventSequence !== previousEventSequence.current) {
-      playFishingCue(sessionEvent, soundEnabled);
-    }
-    previousEventSequence.current = sessionEventSequence;
-  }, [sessionEvent, sessionEventSequence, soundEnabled]);
+    if (audioCue) playFishingCue(audioCue, soundEnabled);
+  }, [audioCue, activeEvent?.sequence, activeEvent?.order, soundEnabled]);
 
 
   return (
